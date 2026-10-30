@@ -271,3 +271,106 @@ CANCELLED
 1. **Zero Audio Persistence:** Raw audio, binary frames, audio recordings, and voice transcripts are processed in memory and discarded immediately. They are never written to Firestore, cloud storage, logs, or local disk.
 2. **Metadata Only:** The database retains strictly session IDs, numerical risk scores, categorical risk bands, evidence quality levels, verification outcomes, and automated 30-day TTL expiration timestamps.
 
+---
+
+## 7. WebSocket Audio Streaming Protocol (M5)
+
+### 7.1 Endpoints
+- **Primary:** `/ws/v1/calls/{session_id}`
+- **Flutter Compatibility Alias:** `/ws/call/{session_id}`
+
+### 7.2 Connection Lifecycle
+1. Client establishes connection with `Authorization: Bearer <Firebase ID token>` (or sends `{"type": "auth", "token": "<token>"}` within 5s).
+2. Server validates token and verifies that the caller owns the specified `session_id`.
+3. Server transitions session state from `CREATED` $\to$ `ACTIVE`.
+4. Server transmits `connection_ready` acknowledgement:
+   ```json
+   {
+     "type": "connection_ready",
+     "session_id": "call_123",
+     "server_time": "2026-10-30T10:00:00Z",
+     "config": {
+       "windowMs": 3500,
+       "hopMs": 1750,
+       "sampleRate": 16000
+     }
+   }
+   ```
+5. Client optionally sends `{"type": "hello", "callId": "call_123"}` and receives `hello_ack`.
+6. Client streams binary audio window frames.
+7. Server responds with live `score` updates per scored window.
+8. When call finishes, client sends `{"type": "end"}` and receives final `outcome` message before disconnect.
+
+### 7.3 Binary Audio Frame Formats
+Backend automatically supports both formats without client configuration:
+
+**Format A — Member 1 Proposed Header (20 bytes LE + 112,000 bytes PCM = 112,020 bytes):**
+- Bytes 0: `version` (uint8, `1`)
+- Byte 1: `flags` (uint8, bit 0 = `is_last`)
+- Bytes 2-3: `reserved` (uint16 LE, `0`)
+- Bytes 4-7: `seq` (uint32 LE, starting at 0)
+- Bytes 8-11: `offset_ms` (uint32 LE)
+- Bytes 12-19: `send_epoch_ms` (uint64 LE)
+- Bytes 20-end: PCM signed 16-bit little-endian mono (56,000 samples = 112,000 bytes)
+
+**Format B — Member 2 Proposed Header (12 bytes BE + 112,000 bytes PCM = 112,012 bytes):**
+- Bytes 0-3: `seq` (uint32 BE)
+- Bytes 4-11: `capture_epoch_ms` (uint64 BE)
+- Bytes 12-end: PCM signed 16-bit little-endian mono (112,000 bytes)
+
+### 7.4 Live Score Message (`score`)
+```json
+{
+  "type": "score",
+  "seq": 0,
+  "windowStartMs": 0,
+  "windowRiskIndex": 88,
+  "call": {
+    "riskIndex": 88,
+    "band": "high",
+    "peakRiskIndex": 88
+  },
+  "voiceOutcome": "suspicious",
+  "evidence": {
+    "level": "good",
+    "usableSpeechSec": 1.75
+  },
+  "serverProcessingMs": 110
+}
+```
+
+### 7.5 WebSocket Application Close Codes
+| Code | Meaning |
+|---|---|
+| `4401` | Unauthorized (invalid, expired, or missing token) |
+| `4403` | Forbidden (caller is not session owner) |
+| `4404` | Session not found |
+| `4408` | Heartbeat timeout (30s inactivity) |
+| `4409` | Conflict (session already in terminal state) |
+| `4413` | Invalid audio frame (wrong size or out of order) |
+| `4429` | Rate limit exceeded |
+
+---
+
+## 8. ML Service Interface Contract (Member 3)
+
+The backend interacts with the audio analysis ML service via async HTTP:
+- **Target URL:** `settings.ml_service_url` (`POST /predict`)
+- **Request Body:** Raw PCM audio bytes (`Content-Type: application/octet-stream`)
+- **Request Headers:**
+  - `X-Session-Id`: Unique call session ID
+  - `X-Window-Id`: Sequence index of the window
+  - `X-Sample-Rate`: `16000`
+- **Response `200 OK` JSON:**
+  ```json
+  {
+    "session_id": "call_123",
+    "window_id": 0,
+    "spoof_score": 0.88,
+    "evidence_quality": 0.92,
+    "speech_duration": 3.5,
+    "processing_time_ms": 110
+  }
+  ```
+- **Error Behavior:** Timeouts or non-200 responses trigger fallback `analysis_unavailable` events to the client. Failures are NEVER treated as safe.
+

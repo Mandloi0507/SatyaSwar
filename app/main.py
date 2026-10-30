@@ -23,6 +23,7 @@ from app.routes.calls import router as calls_router
 from app.routes.contacts import router as contacts_router
 from app.routes.users import router as users_router
 from app.services.firebase import init_firebase
+from app.websocket.call_stream import router as ws_router
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,9 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(contacts_router)
 app.include_router(calls_router)
+
+# M5: WebSocket Audio Streaming
+app.include_router(ws_router)
 
 # M7: Trusted-Contact Verification (placeholder)
 # app.include_router(verification_router, prefix="/api/v1/verification", tags=["Verification"])

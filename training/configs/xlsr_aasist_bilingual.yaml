@@ -1,0 +1,43 @@
+# DeepFense Anti-Spoofing Configuration: XLS-R 300M + AASIST Head (Bilingual English & Hindi)
+# Authoritative source: Implementation.md, Section 10.2
+
+model:
+  name: xlsr300m_aasist_ft
+  frontend:
+    type: huggingface
+    pretrained_name: facebook/wav2vec2-xls-r-300m
+    freeze: true
+  backend:
+    type: aasist
+    input_dim: 1024
+    hidden_dim: 64
+    num_heads: 4
+    num_classes: 2
+
+data:
+  sample_rate: 16000
+  crop_samples: 64600  # ~4.04s standard model input
+  pad_mode: repeat
+  batch_size: 16
+  num_workers: 2
+  manifest_path: data/manifest.csv
+
+training:
+  epochs: 8
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  loss: cross_entropy
+  optimizer: adamw
+  early_stopping:
+    patience: 3
+    metric: macro_eer_en_hi
+    mode: min
+  eval_frequency_epochs: 1
+
+augmentation:
+  telephony:
+    profiles: ["g711_ulaw", "g711_alaw", "gsm"]
+    probability: 0.4
+  additive_noise:
+    snr_levels: [20, 10, 5]
+    probability: 0.3

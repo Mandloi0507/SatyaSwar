@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "type": "call_summary",
+  "call_id": "c_01HZX876ABC",
+  "peak_score": 0.84,
+  "mean_score": 0.72,
+  "final_band": "high",
+  "final_outcome": "suspicious",
+  "time_in_band_s": {
+    "low": 0.0,
+    "medium": 3.5,
+    "high": 8.75,
+    "insufficient": 0.0
+  },
+  "evidence_quality_mean": 0.81,
+  "languages_seen": ["hi"],
+  "context_categories": ["urgency", "money"],
+  "windows_scored": 7,
+  "windows_insufficient": 0,
+  "latency_ms": {
+    "p50": 235.0,
+    "p95": 285.0
+  },
+  "mock": false
+}

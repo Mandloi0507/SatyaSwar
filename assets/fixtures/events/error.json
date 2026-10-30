@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "type": "error",
+  "call_id": "c_01HZX876ABC",
+  "code": "bad_frame",
+  "message": "Received frame with unexpected odd byte count: 56001 bytes",
+  "recoverable": true
+}

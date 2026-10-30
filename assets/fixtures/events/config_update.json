@@ -1,0 +1,5 @@
+{
+  "schema_version": "1.0",
+  "type": "config_update",
+  "telephony_profile": "g711_ulaw"
+}

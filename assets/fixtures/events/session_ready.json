@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "type": "session_ready",
+  "call_id": "c_01HZX876ABC",
+  "model": {
+    "name": "xlsr300m_aasist_ft",
+    "version": "2026-10-30a"
+  },
+  "device": "cuda:0",
+  "warmup_ms": 245.5,
+  "contacts_loaded": 2
+}

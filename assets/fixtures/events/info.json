@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "type": "info",
+  "call_id": "c_01HZX876ABC",
+  "code": "windows_dropped",
+  "message": "Dropped 1 oldest pending window to keep latency within real-time budget"
+}

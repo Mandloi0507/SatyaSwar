@@ -1,0 +1,15 @@
+# SatyaSwar ML Risk Thresholds
+# NOTE: These values are placeholders until calibrated against held-out evaluation data.
+# calibrated_on: placeholder_uncalibrated   date: 2026-10-30   model: TBD   n_genuine: 0   n_spoof: 0
+
+default:
+  low_max: 0.35
+  high_min: 0.65
+
+hi:
+  low_max: 0.35
+  high_min: 0.65
+
+en:
+  low_max: 0.35
+  high_min: 0.65

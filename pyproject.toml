@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "satyaswar-ml"
+version = "1.0.0"
+description = "SatyaSwar AI/ML voice-integrity and voice-cloning impersonation-risk prototype (SIH 2026, PS 26104)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Member 3: AI/ML and ML integration", email = "ml@satyaswar.local" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security",
+]
+dependencies = [
+    "torch",
+    "torchaudio",
+    "transformers",
+    "safetensors",
+    "huggingface_hub",
+    "soundfile",
+    "librosa",
+    "scipy",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "pyyaml",
+    "python-dotenv",
+    "silero-vad",
+    "faster-whisper",
+    "rapidfuzz",
+    "indic-transliteration",
+    "fastapi",
+    "uvicorn",
+    "websockets",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.20",
+    "httpx",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-q"
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = [
+    "RUF059", "SIM102", "RUF046", "UP006", "UP035", "PLR0402", "UP045",
+    "S110", "BLE001", "PLW1510", "PYI063", "C414", "F841", "SIM117", "E501",
+    "ASYNC230", "UP022"
+]
+
+
+

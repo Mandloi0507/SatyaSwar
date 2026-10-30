@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "type": "session_start",
+  "call_id": "c_01HZX876ABC",
+  "mode": "chunks",
+  "language_hint": "hi",
+  "telephony_profile": "none",
+  "contacts": [
+    {
+      "contact_id": "uid_001",
+      "display_name": "Priyanka Sharma",
+      "aliases": ["Priti", "प्रीति"],
+      "label": "Sister"
+    },
+    {
+      "contact_id": "uid_002",
+      "display_name": "Abhishek Shukla",
+      "aliases": ["Abhi"],
+      "label": "Colleague"
+    }
+  ],
+  "resume": false
+}

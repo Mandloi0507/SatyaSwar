@@ -1,0 +1,38 @@
+# SatyaSwar Telephony Simulation Profiles
+# Defines supported 8 kHz / telephony degradation chains
+
+profiles:
+  none:
+    description: "Pass-through 16 kHz uncompressed audio"
+    implementation: "in_memory"
+    sample_rate: 16000
+
+  g711_ulaw:
+    description: "G.711 mu-law 8 kHz companded narrowband telephony (North America/Japan standard)"
+    implementation: "audioop_in_memory"
+    sample_rate: 8000
+    companding: "ulaw"
+
+  g711_alaw:
+    description: "G.711 A-law 8 kHz companded narrowband telephony (Europe/India standard)"
+    implementation: "audioop_in_memory"
+    sample_rate: 8000
+    companding: "alaw"
+
+  amr_nb:
+    description: "Adaptive Multi-Rate Narrowband (AMR-NB) 8 kHz mobile codec"
+    implementation: "ffmpeg_subprocess"
+    ffmpeg_encoder: "libopencore_amrnb"
+    sample_rate: 8000
+
+  gsm:
+    description: "GSM 06.10 Full Rate 8 kHz cellular audio"
+    implementation: "ffmpeg_subprocess"
+    ffmpeg_encoder: "libgsm"
+    sample_rate: 8000
+
+  opus_8k:
+    description: "Opus 8 kHz low-bitrate VoIP speech codec"
+    implementation: "ffmpeg_subprocess"
+    ffmpeg_encoder: "libopus"
+    sample_rate: 8000

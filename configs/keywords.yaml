@@ -1,0 +1,159 @@
+# SatyaSwar Context Lexicon
+# Categories: urgency, secrecy, money, otp_credentials, authority, family_emergency
+# Supports English (en), Hinglish (hi_latin), and Devanagari (hi_deva)
+
+urgency:
+  en:
+    - urgent
+    - urgently
+    - immediately
+    - right now
+    - asap
+    - hurry
+    - quickly
+    - emergency
+  hi_latin:
+    - jaldi
+    - turant
+    - abhi
+    - foran
+    - jaldi karo
+    - der mat karo
+    - emergency
+  hi_deva:
+    - जल्दी
+    - तुरंत
+    - अभी
+    - फौरन
+    - देर मत करो
+    - इमरजेंसी
+
+secrecy:
+  en:
+    - don't tell anyone
+    - do not tell
+    - keep it secret
+    - confidential
+    - between us
+  hi_latin:
+    - kisi ko mat batana
+    - kisi ko mat bolna
+    - raaz rakhna
+    - gupt
+    - confidential
+  hi_deva:
+    - किसी को मत बताना
+    - किसी को मत बोलना
+    - राज़ रखना
+    - गुप्त
+
+money:
+  en:
+    - transfer
+    - send money
+    - bank account
+    - upi
+    - gift card
+    - payment
+    - rupees
+    - lakh
+  hi_latin:
+    - paise
+    - paisa
+    - rupaye
+    - transfer karo
+    - paise bhejo
+    - khata
+    - upi
+    - lakh
+  hi_deva:
+    - पैसे
+    - पैसा
+    - रुपये
+    - ट्रांसफर
+    - पैसे भेजो
+    - खाता
+    - लाख
+    - हज़ार
+
+otp_credentials:
+  en:
+    - otp
+    - one time password
+    - pin
+    - password
+    - cvv
+    - card number
+    - verification code
+  hi_latin:
+    - otp
+    - pin
+    - password
+    - cvv
+    - card number
+    - code batao
+    - otp batao
+    - otp bhejo
+  hi_deva:
+    - ओटीपी
+    - पिन
+    - पासवर्ड
+    - कोड बताओ
+    - ओटीपी बताओ
+    - ओटीपी भेजो
+
+authority:
+  en:
+    - police
+    - cbi
+    - customs
+    - court
+    - arrest
+    - digital arrest
+    - warrant
+    - tax department
+    - bank officer
+  hi_latin:
+    - police
+    - pulis
+    - cbi
+    - court
+    - giraftari
+    - arrest
+    - warrant
+    - income tax
+    - bank officer
+  hi_deva:
+    - पुलिस
+    - सीबीआई
+    - कोर्ट
+    - गिरफ्तारी
+    - अरेस्ट
+    - वारंट
+    - इनकम टैक्स
+
+family_emergency:
+  en:
+    - accident
+    - hospital
+    - in trouble
+    - kidnapped
+    - bail
+    - surgery
+    - injured
+  hi_latin:
+    - accident
+    - hospital
+    - musibat
+    - bail
+    - operation
+    - chot
+    - zakhmi
+  hi_deva:
+    - एक्सीडेंट
+    - अस्पताल
+    - हॉस्पिटल
+    - मुसीबत
+    - ज़मानत
+    - ऑपरेशन
+    - चोट

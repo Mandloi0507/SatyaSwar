@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "type": "context",
+  "call_id": "c_01HZX876ABC",
+  "flags": [
+    {
+      "category": "urgency",
+      "term": "अभी",
+      "language": "hi_deva",
+      "at_ms": 2100
+    },
+    {
+      "category": "money",
+      "term": "पचास हज़ार",
+      "language": "hi_deva",
+      "at_ms": 3400
+    },
+    {
+      "category": "money",
+      "term": "ट्रांसफर",
+      "language": "hi_deva",
+      "at_ms": 4200
+    }
+  ]
+}

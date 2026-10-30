@@ -1,0 +1,64 @@
+schema_version: "1.0"
+env: dev                        # dev | demo (demo refuses debug dumps)
+
+audio:
+  sample_rate: 16000
+  mode_default: chunks          # chunks | windows
+  chunk_s: 1.75
+  window_s: 3.5
+  hop_s: 1.75
+  ring_buffer_s: 8.0
+  model_input_samples: 64600
+  trim_silence_for_model: true
+  pad_mode: repeat              # repeat | zeros (decide in bake-off)
+  min_speech_s_for_scoring: 1.0
+  max_frame_s: 10.0
+
+vad:
+  threshold: 0.5
+  min_speech_ms: 250
+  min_silence_ms: 100
+
+detector:
+  primary: xlsr300m_aasist_ft   # registry key; set after bake-off
+  secondary: null
+  device: auto                  # auto | cuda | cpu
+  precision: fp16
+  checkpoint_path: models/xlsr300m_aasist_ft.pth
+  max_pending_windows: 2
+
+scoring:
+  alpha_base: 0.6
+  escalate_consecutive: 2
+  deescalate_consecutive: 3
+  hysteresis_delta: 0.05
+  immediate_high_margin: 0.15
+  min_alert_spacing_s: 6.0
+  evidence:
+    w_speech: 0.45
+    w_snr: 0.30
+    w_agreement: 0.25
+    good_min: 0.70
+    fair_min: 0.45
+
+asr:
+  enabled: true
+  model: small                  # choose by WER and latency (7.7)
+  device: auto
+  compute_type: auto            # float16 on GPU, int8 on CPU
+  trigger_speech_s: [6, 12]
+  max_speech_s: 12
+  languages: [en, hi]
+  language_confidence_min: 0.7
+  beam_size: 1
+
+telephony:
+  default_profile: none
+  profiles: [none, g711_ulaw, g711_alaw, amr_nb, gsm, opus_8k]
+
+privacy:
+  debug_dump_audio: false
+  log_transcripts: false
+
+session:
+  resume_window_s: 60

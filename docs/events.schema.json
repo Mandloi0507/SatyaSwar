@@ -1,0 +1,1207 @@
+{
+  "$defs": {
+    "AlertEvent": {
+      "additionalProperties": false,
+      "description": "Emitted only on committed band transitions with hysteresis.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "alert",
+          "default": "alert",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "level": {
+          "description": "Alert severity level",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "insufficient"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "reason_code": {
+          "description": "Auditable reason code (e.g. 'band_escalated_high')",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "text": {
+          "$ref": "#/$defs/BilingualText",
+          "description": "Localized alert strings for UI display"
+        },
+        "audio_key": {
+          "$ref": "#/$defs/BilingualText",
+          "description": "Audio file identifiers for voice prompt playback"
+        }
+      },
+      "required": [
+        "call_id",
+        "level",
+        "reason_code",
+        "text",
+        "audio_key"
+      ],
+      "title": "AlertEvent",
+      "type": "object"
+    },
+    "BilingualText": {
+      "additionalProperties": false,
+      "properties": {
+        "en": {
+          "description": "English text or audio key",
+          "title": "En",
+          "type": "string"
+        },
+        "hi": {
+          "description": "Hindi text or audio key",
+          "title": "Hi",
+          "type": "string"
+        }
+      },
+      "required": [
+        "en",
+        "hi"
+      ],
+      "title": "BilingualText",
+      "type": "object"
+    },
+    "CallSummaryEvent": {
+      "additionalProperties": false,
+      "description": "Summary emitted at session close.\nCarries scores and timing metrics only. Audio and transcripts are strictly omitted.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "call_summary",
+          "default": "call_summary",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "peak_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peak Score"
+        },
+        "mean_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mean Score"
+        },
+        "final_band": {
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "insufficient"
+          ],
+          "title": "Final Band",
+          "type": "string"
+        },
+        "final_outcome": {
+          "enum": [
+            "likely_genuine",
+            "suspicious",
+            "insufficient_evidence"
+          ],
+          "title": "Final Outcome",
+          "type": "string"
+        },
+        "time_in_band_s": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Seconds spent in each risk band: low, medium, high, insufficient",
+          "title": "Time In Band S",
+          "type": "object"
+        },
+        "evidence_quality_mean": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Evidence Quality Mean",
+          "type": "number"
+        },
+        "languages_seen": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages Seen",
+          "type": "array"
+        },
+        "context_categories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Context Categories",
+          "type": "array"
+        },
+        "windows_scored": {
+          "minimum": 0,
+          "title": "Windows Scored",
+          "type": "integer"
+        },
+        "windows_insufficient": {
+          "minimum": 0,
+          "title": "Windows Insufficient",
+          "type": "integer"
+        },
+        "latency_ms": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "Latency statistics (e.g. p50, p95)",
+          "title": "Latency Ms",
+          "type": "object"
+        },
+        "mock": {
+          "default": false,
+          "title": "Mock",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "call_id",
+        "final_band",
+        "final_outcome",
+        "time_in_band_s",
+        "evidence_quality_mean",
+        "windows_scored",
+        "windows_insufficient",
+        "latency_ms"
+      ],
+      "title": "CallSummaryEvent",
+      "type": "object"
+    },
+    "ClaimCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "contact_id": {
+          "description": "Matched contact ID",
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "matched_on": {
+          "description": "Display name, alias, or transcript token that matched",
+          "title": "Matched On",
+          "type": "string"
+        },
+        "score": {
+          "description": "Fuzzy match similarity score [0, 100]",
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "rank": {
+          "description": "Rank among returned candidates (1 = top)",
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contact_id",
+        "matched_on",
+        "score",
+        "rank"
+      ],
+      "title": "ClaimCandidate",
+      "type": "object"
+    },
+    "ClaimEvent": {
+      "additionalProperties": false,
+      "description": "Ranked suggested matches from caller contact list.\nNOTE: Never auto-selects; suggestions only.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "claim",
+          "default": "claim",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/ClaimCandidate"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "ambiguous": {
+          "default": false,
+          "description": "True if top candidates are close or share tokens",
+          "title": "Ambiguous",
+          "type": "boolean"
+        },
+        "no_match": {
+          "default": false,
+          "description": "True if no contact exceeded similarity threshold",
+          "title": "No Match",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "call_id"
+      ],
+      "title": "ClaimEvent",
+      "type": "object"
+    },
+    "ConfigUpdateMessage": {
+      "additionalProperties": false,
+      "description": "Dynamic configuration update during an active call.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "description": "Contract schema version",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "config_update",
+          "default": "config_update",
+          "title": "Type",
+          "type": "string"
+        },
+        "telephony_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Update telephony profile (e.g. 'g711_ulaw')",
+          "title": "Telephony Profile"
+        }
+      },
+      "title": "ConfigUpdateMessage",
+      "type": "object"
+    },
+    "Contact": {
+      "additionalProperties": false,
+      "description": "Contact representation for claimed-identity matching.",
+      "properties": {
+        "contact_id": {
+          "description": "Unique contact identifier (e.g. UID)",
+          "title": "Contact Id",
+          "type": "string"
+        },
+        "display_name": {
+          "description": "Full display name (Latin or Devanagari)",
+          "title": "Display Name",
+          "type": "string"
+        },
+        "aliases": {
+          "description": "Alternative names / nicknames",
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Relationship or disambiguation label (e.g. 'Sister')",
+          "title": "Label"
+        }
+      },
+      "required": [
+        "contact_id",
+        "display_name"
+      ],
+      "title": "Contact",
+      "type": "object"
+    },
+    "ContextEvent": {
+      "additionalProperties": false,
+      "description": "Emitted when context keyword rules match transcript tokens.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "context",
+          "default": "context",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "flags": {
+          "description": "Detected scam context signals",
+          "items": {
+            "$ref": "#/$defs/ContextFlag"
+          },
+          "minItems": 1,
+          "title": "Flags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "call_id",
+        "flags"
+      ],
+      "title": "ContextEvent",
+      "type": "object"
+    },
+    "ContextFlag": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "description": "Scam context risk category",
+          "enum": [
+            "urgency",
+            "secrecy",
+            "money",
+            "otp_credentials",
+            "authority",
+            "family_emergency"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "term": {
+          "description": "Matched keyword or phrase",
+          "title": "Term",
+          "type": "string"
+        },
+        "language": {
+          "description": "Source language ('en', 'hi_latin', 'hi_deva')",
+          "title": "Language",
+          "type": "string"
+        },
+        "at_ms": {
+          "description": "Timestamp offset where keyword was spotted (ms)",
+          "minimum": 0,
+          "title": "At Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "category",
+        "term",
+        "language",
+        "at_ms"
+      ],
+      "title": "ContextFlag",
+      "type": "object"
+    },
+    "ErrorEvent": {
+      "additionalProperties": false,
+      "description": "Error event emitted on framing or runtime failure.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Call Id"
+        },
+        "code": {
+          "description": "Error code (e.g. 'bad_frame', 'model_error')",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "description": "Error detail",
+          "title": "Message",
+          "type": "string"
+        },
+        "recoverable": {
+          "default": true,
+          "description": "Whether the session can continue",
+          "title": "Recoverable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorEvent",
+      "type": "object"
+    },
+    "EvidenceModel": {
+      "additionalProperties": false,
+      "description": "Measurements supporting score reliability.",
+      "properties": {
+        "speech_seconds": {
+          "description": "Active speech duration in window (seconds)",
+          "minimum": 0.0,
+          "title": "Speech Seconds",
+          "type": "number"
+        },
+        "snr_db": {
+          "description": "Estimated signal-to-noise ratio in dB",
+          "title": "Snr Db",
+          "type": "number"
+        },
+        "agreement": {
+          "description": "Score consistency or inter-model agreement [0, 1]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Agreement",
+          "type": "number"
+        },
+        "quality": {
+          "description": "Combined evidence quality score [0, 1]",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Quality",
+          "type": "number"
+        },
+        "quality_label": {
+          "description": "Discrete evidence quality rating",
+          "enum": [
+            "good",
+            "fair",
+            "poor"
+          ],
+          "title": "Quality Label",
+          "type": "string"
+        },
+        "synthetic_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Dedicated synthetic voice probability [0, 1]",
+          "title": "Synthetic Score"
+        },
+        "replay_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Dedicated replay / physical attack indicator [0, 1]",
+          "title": "Replay Score"
+        },
+        "replay_detected": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Flag indicating presentation/replay attack detected",
+          "title": "Replay Detected"
+        }
+      },
+      "required": [
+        "speech_seconds",
+        "snr_db",
+        "agreement",
+        "quality",
+        "quality_label"
+      ],
+      "title": "EvidenceModel",
+      "type": "object"
+    },
+    "InfoEvent": {
+      "additionalProperties": false,
+      "description": "Operational advisory event (e.g. dropped windows, ASR unavailable).",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "info",
+          "default": "info",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Call Id"
+        },
+        "code": {
+          "description": "Machine-readable info code (e.g. 'windows_dropped')",
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "description": "Descriptive status message",
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "InfoEvent",
+      "type": "object"
+    },
+    "LanguageModel": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Detected ISO language code ('hi', 'en' or null)",
+          "title": "Code"
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Detection confidence",
+          "title": "Confidence"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Detection source (e.g. 'asr', 'hint')",
+          "title": "Source"
+        }
+      },
+      "title": "LanguageModel",
+      "type": "object"
+    },
+    "LatencyBreakdown": {
+      "additionalProperties": false,
+      "properties": {
+        "decode": {
+          "default": 0.0,
+          "description": "Audio decode latency (ms)",
+          "minimum": 0.0,
+          "title": "Decode",
+          "type": "number"
+        },
+        "telephony": {
+          "default": 0.0,
+          "description": "Telephony filtering latency (ms)",
+          "minimum": 0.0,
+          "title": "Telephony",
+          "type": "number"
+        },
+        "vad": {
+          "default": 0.0,
+          "description": "VAD & SNR latency (ms)",
+          "minimum": 0.0,
+          "title": "Vad",
+          "type": "number"
+        },
+        "detector": {
+          "default": 0.0,
+          "description": "Model inference latency (ms)",
+          "minimum": 0.0,
+          "title": "Detector",
+          "type": "number"
+        },
+        "total": {
+          "default": 0.0,
+          "description": "End-to-end window processing latency (ms)",
+          "minimum": 0.0,
+          "title": "Total",
+          "type": "number"
+        }
+      },
+      "title": "LatencyBreakdown",
+      "type": "object"
+    },
+    "ModelMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Model identifier (e.g. 'xlsr300m_aasist_ft')",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "description": "Model checkpoint or release version",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "title": "ModelMeta",
+      "type": "object"
+    },
+    "ScoreEvent": {
+      "additionalProperties": false,
+      "description": "Emitted after first 3.5s of audio, then every 1.75s hop.\nPrimary voice authenticity signal.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "score",
+          "default": "score",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "window_index": {
+          "description": "Monotonically increasing window index",
+          "minimum": 0,
+          "title": "Window Index",
+          "type": "integer"
+        },
+        "window": {
+          "$ref": "#/$defs/WindowBounds"
+        },
+        "spoof_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Raw spoof probability [0, 1], higher = more likely synthetic. Null on insufficient evidence.",
+          "title": "Spoof Score"
+        },
+        "smoothed_score": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Evidence-weighted EMA smoothed score. Null on insufficient evidence.",
+          "title": "Smoothed Score"
+        },
+        "band": {
+          "description": "Current risk band",
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            "insufficient"
+          ],
+          "title": "Band",
+          "type": "string"
+        },
+        "previous_band": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "insufficient"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Previous committed risk band",
+          "title": "Previous Band"
+        },
+        "band_changed": {
+          "default": false,
+          "description": "True if hysteresis committed a band transition",
+          "title": "Band Changed",
+          "type": "boolean"
+        },
+        "outcome": {
+          "description": "Three-way decision outcome",
+          "enum": [
+            "likely_genuine",
+            "suspicious",
+            "insufficient_evidence"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvidenceModel"
+        },
+        "language": {
+          "$ref": "#/$defs/LanguageModel"
+        },
+        "telephony_profile": {
+          "default": "none",
+          "title": "Telephony Profile",
+          "type": "string"
+        },
+        "latency_ms": {
+          "$ref": "#/$defs/LatencyBreakdown"
+        },
+        "client_ts_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Client timestamp from binary frame header",
+          "title": "Client Ts Ms"
+        },
+        "server_recv_ts_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Server receipt timestamp",
+          "title": "Server Recv Ts Ms"
+        },
+        "server_send_ts_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Server dispatch timestamp",
+          "title": "Server Send Ts Ms"
+        },
+        "model": {
+          "$ref": "#/$defs/ModelMeta"
+        },
+        "why": {
+          "description": "Auditable computed measurement signals",
+          "items": {
+            "$ref": "#/$defs/WhyItem"
+          },
+          "title": "Why",
+          "type": "array"
+        },
+        "mock": {
+          "default": false,
+          "description": "True ONLY when generated by mock engine",
+          "title": "Mock",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "call_id",
+        "window_index",
+        "window",
+        "band",
+        "outcome",
+        "evidence",
+        "language",
+        "latency_ms",
+        "model"
+      ],
+      "title": "ScoreEvent",
+      "type": "object"
+    },
+    "SessionEndMessage": {
+      "additionalProperties": false,
+      "description": "Signal session termination.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "description": "Contract schema version",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "session_end",
+          "default": "session_end",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "title": "SessionEndMessage",
+      "type": "object"
+    },
+    "SessionReadyEvent": {
+      "additionalProperties": false,
+      "description": "Emitted after session_start when engine has prepared buffers and warm-up.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "session_ready",
+          "default": "session_ready",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "model": {
+          "additionalProperties": true,
+          "description": "Active model metadata",
+          "title": "Model",
+          "type": "object"
+        },
+        "device": {
+          "description": "Compute device ('cuda:0', 'cpu', etc.)",
+          "title": "Device",
+          "type": "string"
+        },
+        "warmup_ms": {
+          "description": "Warm-up execution time in ms",
+          "minimum": 0.0,
+          "title": "Warmup Ms",
+          "type": "number"
+        },
+        "contacts_loaded": {
+          "description": "Number of contacts indexed for matching",
+          "minimum": 0,
+          "title": "Contacts Loaded",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "call_id",
+        "model",
+        "device",
+        "warmup_ms",
+        "contacts_loaded"
+      ],
+      "title": "SessionReadyEvent",
+      "type": "object"
+    },
+    "SessionStartMessage": {
+      "additionalProperties": false,
+      "description": "Message sent by client or backend to initialise a call session.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "description": "Contract schema version",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "session_start",
+          "default": "session_start",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "description": "Unique call identifier",
+          "title": "Call Id",
+          "type": "string"
+        },
+        "mode": {
+          "default": "chunks",
+          "description": "Chunk mode (1.75s non-overlapping) or Window mode (3.5s overlapping)",
+          "enum": [
+            "chunks",
+            "windows"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "language_hint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional ISO language hint (e.g. 'hi', 'en')",
+          "title": "Language Hint"
+        },
+        "telephony_profile": {
+          "default": "none",
+          "description": "Telephony degradation profile to apply",
+          "title": "Telephony Profile",
+          "type": "string"
+        },
+        "contacts": {
+          "description": "Caller's contact list for identity matching",
+          "items": {
+            "$ref": "#/$defs/Contact"
+          },
+          "title": "Contacts",
+          "type": "array"
+        },
+        "resume": {
+          "default": false,
+          "description": "True if reconnecting to an existing session within 60s",
+          "title": "Resume",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "call_id"
+      ],
+      "title": "SessionStartMessage",
+      "type": "object"
+    },
+    "TranscriptEvent": {
+      "additionalProperties": false,
+      "description": "Emitted for early speech transcription off the critical scoring path.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "type": {
+          "const": "transcript",
+          "default": "transcript",
+          "title": "Type",
+          "type": "string"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "text": {
+          "description": "Transcribed speech text (dropped after dispatch)",
+          "title": "Text",
+          "type": "string"
+        },
+        "language": {
+          "description": "Detected language code ('en' or 'hi')",
+          "title": "Language",
+          "type": "string"
+        },
+        "is_final": {
+          "default": false,
+          "description": "True when 12s speech window transcription completes",
+          "title": "Is Final",
+          "type": "boolean"
+        },
+        "start_ms": {
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "minimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "call_id",
+        "text",
+        "language",
+        "start_ms",
+        "end_ms"
+      ],
+      "title": "TranscriptEvent",
+      "type": "object"
+    },
+    "WhyItem": {
+      "additionalProperties": false,
+      "description": "Computed, auditable explanation item.\nNOTE: Free-form text explanations are strictly forbidden by AGENTS.md.",
+      "properties": {
+        "kind": {
+          "description": "Computed metric kind (e.g. 'window_score', 'speech_seconds', 'snr_db', 'model_agreement', 'synthetic_score', 'replay_score', 'supporting_heuristic')",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Localization key for UI rendering",
+          "title": "Text Key"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            }
+          ],
+          "description": "Exact computed measurement",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "WhyItem",
+      "type": "object"
+    },
+    "WindowBounds": {
+      "additionalProperties": false,
+      "properties": {
+        "start_ms": {
+          "description": "Start offset of window in call audio (ms)",
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "description": "End offset of window in call audio (ms)",
+          "minimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms"
+      ],
+      "title": "WindowBounds",
+      "type": "object"
+    }
+  },
+  "title": "SatyaSwarContractEvents",
+  "description": "Comprehensive JSON Schema for SatyaSwar Integration Contract Events"
+}

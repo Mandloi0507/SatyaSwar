@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.token
+
+# Large data & model weights (MUST NOT be checked in)
+data/
+models/
+*.pth
+*.pt
+*.onnx
+*.bin
+*.safetensors
+*.ckpt
+
+# Audio files (except demo assets, scenarios, alerts, fixtures)
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.raw
+*.pcm
+!assets/fixtures/**
+!assets/alerts/**
+!assets/scenarios/**
+
+# Logs
+*.log
+logs/
+
+# IDE & OS
+.vscode/
+.idea/
+.gemini/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Test & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+

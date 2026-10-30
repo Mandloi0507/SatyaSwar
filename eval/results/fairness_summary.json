@@ -1,0 +1,112 @@
+{
+  "headline": {
+    "n_total": 320,
+    "n_genuine": 160,
+    "n_spoof": 160,
+    "overall_eer": 0.0062,
+    "overall_mindcf": 0.0938,
+    "optimal_threshold": 0.4766,
+    "calibrated_thresholds": {
+      "low_max": 0.377,
+      "high_min": 0.577
+    },
+    "far_at_065": 0.0,
+    "frr_at_065": 0.1625
+  },
+  "fairness_by_language": {
+    "en": {
+      "n_samples": 160,
+      "n_genuine": 80,
+      "n_spoof": 80,
+      "eer": 0.0125,
+      "optimal_threshold": 0.4766,
+      "far": 0.0,
+      "frr": 0.1875,
+      "accuracy": 0.9062,
+      "is_statistically_sound": true
+    },
+    "hi": {
+      "n_samples": 160,
+      "n_genuine": 80,
+      "n_spoof": 80,
+      "eer": 0.0,
+      "optimal_threshold": 0.5239,
+      "far": 0.0,
+      "frr": 0.1375,
+      "accuracy": 0.9313,
+      "is_statistically_sound": true
+    }
+  },
+  "robustness_by_codec": {
+    "clean": {
+      "n_samples": 200,
+      "n_genuine": 100,
+      "n_spoof": 100,
+      "eer": 0.0,
+      "optimal_threshold": 0.5,
+      "far": 0.0,
+      "frr": 0.14,
+      "accuracy": 0.93,
+      "is_statistically_sound": true
+    },
+    "g711_ulaw": {
+      "n_samples": 120,
+      "n_genuine": 60,
+      "n_spoof": 60,
+      "eer": 0.0083,
+      "optimal_threshold": 0.4599,
+      "far": 0.0,
+      "frr": 0.2,
+      "accuracy": 0.9,
+      "is_statistically_sound": true
+    }
+  },
+  "performance_by_attack_type": {
+    "none": {
+      "n_samples": 160,
+      "n_genuine": 160,
+      "n_spoof": 0,
+      "eer": 0.0,
+      "optimal_threshold": 0.5,
+      "far": 0.0,
+      "frr": 0.0,
+      "accuracy": 1.0,
+      "is_statistically_sound": false
+    },
+    "synthetic_speech": {
+      "n_samples": 100,
+      "n_genuine": 0,
+      "n_spoof": 100,
+      "eer": 0.0,
+      "optimal_threshold": 0.5,
+      "far": 0.0,
+      "frr": 0.14,
+      "accuracy": 0.86,
+      "is_statistically_sound": false
+    },
+    "replay_attack": {
+      "n_samples": 60,
+      "n_genuine": 0,
+      "n_spoof": 60,
+      "eer": 0.0,
+      "optimal_threshold": 0.5,
+      "far": 0.0,
+      "frr": 0.2,
+      "accuracy": 0.8,
+      "is_statistically_sound": false
+    }
+  },
+  "performance_by_noise": {
+    "clean": {
+      "n_samples": 320,
+      "n_genuine": 160,
+      "n_spoof": 160,
+      "eer": 0.0062,
+      "optimal_threshold": 0.4766,
+      "far": 0.0,
+      "frr": 0.1625,
+      "accuracy": 0.9187,
+      "is_statistically_sound": true
+    }
+  }
+}

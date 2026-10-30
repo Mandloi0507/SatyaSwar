@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "type": "score",
+  "call_id": "c_01HZX876ABC",
+  "window_index": 3,
+  "window": {
+    "start_ms": 5250,
+    "end_ms": 8750
+  },
+  "spoof_score": 0.81,
+  "smoothed_score": 0.74,
+  "band": "high",
+  "previous_band": "medium",
+  "band_changed": true,
+  "outcome": "suspicious",
+  "evidence": {
+    "speech_seconds": 2.9,
+    "snr_db": 18.4,
+    "agreement": 0.88,
+    "quality": 0.79,
+    "quality_label": "good",
+    "synthetic_score": 0.81,
+    "replay_score": 0.12,
+    "replay_detected": false
+  },
+  "language": {
+    "code": "hi",
+    "confidence": 0.93,
+    "source": "asr"
+  },
+  "telephony_profile": "none",
+  "latency_ms": {
+    "decode": 2.1,
+    "telephony": 0.0,
+    "vad": 18.3,
+    "detector": 212.4,
+    "total": 241.2
+  },
+  "client_ts_ms": 1730300000123,
+  "server_recv_ts_ms": 1730300000290,
+  "server_send_ts_ms": 1730300000531,
+  "model": {
+    "name": "xlsr300m_aasist_ft",
+    "version": "2026-10-30a"
+  },
+  "why": [
+    {
+      "kind": "window_score",
+      "text_key": "peak_window",
+      "value": 0.81
+    },
+    {
+      "kind": "speech_seconds",
+      "value": 2.9
+    },
+    {
+      "kind": "snr_db",
+      "value": 18.4
+    },
+    {
+      "kind": "model_agreement",
+      "value": 0.88
+    },
+    {
+      "kind": "synthetic_score",
+      "value": 0.81
+    },
+    {
+      "kind": "replay_score",
+      "value": 0.12
+    }
+  ],
+  "mock": false
+}

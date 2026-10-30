@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "type": "alert",
+  "call_id": "c_01HZX876ABC",
+  "level": "high",
+  "reason_code": "band_escalated_high",
+  "text": {
+    "en": "Warning. This voice may be synthetic. Do not share money or codes. Verify the caller now.",
+    "hi": "सावधान! यह आवाज़ नकली हो सकती है। पैसे या कोड न दें। अभी कॉलर की पुष्टि करें।"
+  },
+  "audio_key": {
+    "en": "alert_high_en",
+    "hi": "alert_high_hi"
+  }
+}

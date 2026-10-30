@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "type": "claim",
+  "call_id": "c_01HZX876ABC",
+  "candidates": [
+    {
+      "contact_id": "uid_001",
+      "matched_on": "Priyanka Sharma",
+      "score": 92.5,
+      "rank": 1
+    }
+  ],
+  "ambiguous": false,
+  "no_match": false
+}

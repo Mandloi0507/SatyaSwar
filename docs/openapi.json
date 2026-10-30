@@ -1,0 +1,859 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SatyaSwar ML Service",
+    "description": "Real-time voice-integrity and voice-cloning impersonation risk ML service",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/ml/health": {
+      "get": {
+        "tags": [
+          "Diagnostics"
+        ],
+        "summary": "Get Health",
+        "description": "Report model loaded status, device, versions, and warm-up latency.",
+        "operationId": "get_health_ml_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ml/model-info": {
+      "get": {
+        "tags": [
+          "Diagnostics"
+        ],
+        "summary": "Get Model Info",
+        "description": "Return model name, version, active thresholds, and evaluated languages.",
+        "operationId": "get_model_info_ml_model_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ml/contacts/match": {
+      "post": {
+        "tags": [
+          "Matching"
+        ],
+        "summary": "Match Contacts",
+        "description": "Rank user contacts against transcript text (no auto-selection).",
+        "operationId": "match_contacts_ml_contacts_match_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactsMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimEvent"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ml/analyze-window": {
+      "post": {
+        "tags": [
+          "Development"
+        ],
+        "summary": "Analyze Window",
+        "description": "Dev and test only endpoint. Disabled unless ML_ENABLE_DEV_ENDPOINTS=1.",
+        "operationId": "analyze_window_ml_analyze_window_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClaimCandidate": {
+        "properties": {
+          "contact_id": {
+            "type": "string",
+            "title": "Contact Id",
+            "description": "Matched contact ID"
+          },
+          "matched_on": {
+            "type": "string",
+            "title": "Matched On",
+            "description": "Display name, alias, or transcript token that matched"
+          },
+          "score": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score",
+            "description": "Fuzzy match similarity score [0, 100]"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Rank",
+            "description": "Rank among returned candidates (1 = top)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contact_id",
+          "matched_on",
+          "score",
+          "rank"
+        ],
+        "title": "ClaimCandidate"
+      },
+      "ClaimEvent": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1.0"
+          },
+          "type": {
+            "type": "string",
+            "const": "claim",
+            "title": "Type",
+            "default": "claim"
+          },
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCandidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "title": "Ambiguous",
+            "description": "True if top candidates are close or share tokens",
+            "default": false
+          },
+          "no_match": {
+            "type": "boolean",
+            "title": "No Match",
+            "description": "True if no contact exceeded similarity threshold",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "call_id"
+        ],
+        "title": "ClaimEvent",
+        "description": "Ranked suggested matches from caller contact list.\nNOTE: Never auto-selects; suggestions only."
+      },
+      "Contact": {
+        "properties": {
+          "contact_id": {
+            "type": "string",
+            "title": "Contact Id",
+            "description": "Unique contact identifier (e.g. UID)"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name",
+            "description": "Full display name (Latin or Devanagari)"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Aliases",
+            "description": "Alternative names / nicknames"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Relationship or disambiguation label (e.g. 'Sister')"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "contact_id",
+          "display_name"
+        ],
+        "title": "Contact",
+        "description": "Contact representation for claimed-identity matching."
+      },
+      "ContactsMatchRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Transcript text to match contacts against"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/Contact"
+            },
+            "type": "array",
+            "title": "Contacts",
+            "description": "Candidate contact list"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "contacts"
+        ],
+        "title": "ContactsMatchRequest"
+      },
+      "EvidenceModel": {
+        "properties": {
+          "speech_seconds": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Speech Seconds",
+            "description": "Active speech duration in window (seconds)"
+          },
+          "snr_db": {
+            "type": "number",
+            "title": "Snr Db",
+            "description": "Estimated signal-to-noise ratio in dB"
+          },
+          "agreement": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Agreement",
+            "description": "Score consistency or inter-model agreement [0, 1]"
+          },
+          "quality": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Quality",
+            "description": "Combined evidence quality score [0, 1]"
+          },
+          "quality_label": {
+            "type": "string",
+            "enum": [
+              "good",
+              "fair",
+              "poor"
+            ],
+            "title": "Quality Label",
+            "description": "Discrete evidence quality rating"
+          },
+          "synthetic_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synthetic Score",
+            "description": "Dedicated synthetic voice probability [0, 1]"
+          },
+          "replay_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Score",
+            "description": "Dedicated replay / physical attack indicator [0, 1]"
+          },
+          "replay_detected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replay Detected",
+            "description": "Flag indicating presentation/replay attack detected"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "speech_seconds",
+          "snr_db",
+          "agreement",
+          "quality",
+          "quality_label"
+        ],
+        "title": "EvidenceModel",
+        "description": "Measurements supporting score reliability."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded",
+              "error"
+            ],
+            "title": "Status",
+            "default": "ok"
+          },
+          "model_loaded": {
+            "type": "boolean",
+            "title": "Model Loaded",
+            "description": "Whether detection model is loaded and ready"
+          },
+          "device": {
+            "type": "string",
+            "title": "Device",
+            "description": "Device string ('cuda:0', 'cpu', etc.)"
+          },
+          "versions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Versions",
+            "description": "Versions of satyaswar_ml, torch, whisper, etc."
+          },
+          "warmup_ms": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Warmup Ms",
+            "description": "Warm-up latency in milliseconds"
+          },
+          "mock": {
+            "type": "boolean",
+            "title": "Mock",
+            "description": "True if running in mock mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model_loaded",
+          "device",
+          "versions",
+          "warmup_ms",
+          "mock"
+        ],
+        "title": "HealthResponse"
+      },
+      "LanguageModel": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code",
+            "description": "Detected ISO language code ('hi', 'en' or null)"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence",
+            "description": "Detection confidence"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Detection source (e.g. 'asr', 'hint')"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LanguageModel"
+      },
+      "LatencyBreakdown": {
+        "properties": {
+          "decode": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Decode",
+            "description": "Audio decode latency (ms)",
+            "default": 0.0
+          },
+          "telephony": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Telephony",
+            "description": "Telephony filtering latency (ms)",
+            "default": 0.0
+          },
+          "vad": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Vad",
+            "description": "VAD & SNR latency (ms)",
+            "default": 0.0
+          },
+          "detector": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Detector",
+            "description": "Model inference latency (ms)",
+            "default": 0.0
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "End-to-end window processing latency (ms)",
+            "default": 0.0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "LatencyBreakdown"
+      },
+      "ModelInfoResponse": {
+        "properties": {
+          "model_name": {
+            "type": "string",
+            "title": "Model Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "thresholds": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Thresholds"
+          },
+          "languages_evaluated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages Evaluated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model_name",
+          "version",
+          "thresholds",
+          "languages_evaluated"
+        ],
+        "title": "ModelInfoResponse"
+      },
+      "ModelMeta": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Model identifier (e.g. 'xlsr300m_aasist_ft')"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "description": "Model checkpoint or release version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version"
+        ],
+        "title": "ModelMeta"
+      },
+      "ScoreEvent": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1.0"
+          },
+          "type": {
+            "type": "string",
+            "const": "score",
+            "title": "Type",
+            "default": "score"
+          },
+          "call_id": {
+            "type": "string",
+            "title": "Call Id"
+          },
+          "window_index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Window Index",
+            "description": "Monotonically increasing window index"
+          },
+          "window": {
+            "$ref": "#/components/schemas/WindowBounds"
+          },
+          "spoof_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spoof Score",
+            "description": "Raw spoof probability [0, 1], higher = more likely synthetic. Null on insufficient evidence."
+          },
+          "smoothed_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Smoothed Score",
+            "description": "Evidence-weighted EMA smoothed score. Null on insufficient evidence."
+          },
+          "band": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "insufficient"
+            ],
+            "title": "Band",
+            "description": "Current risk band"
+          },
+          "previous_band": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "insufficient"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Band",
+            "description": "Previous committed risk band"
+          },
+          "band_changed": {
+            "type": "boolean",
+            "title": "Band Changed",
+            "description": "True if hysteresis committed a band transition",
+            "default": false
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "likely_genuine",
+              "suspicious",
+              "insufficient_evidence"
+            ],
+            "title": "Outcome",
+            "description": "Three-way decision outcome"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceModel"
+          },
+          "language": {
+            "$ref": "#/components/schemas/LanguageModel"
+          },
+          "telephony_profile": {
+            "type": "string",
+            "title": "Telephony Profile",
+            "default": "none"
+          },
+          "latency_ms": {
+            "$ref": "#/components/schemas/LatencyBreakdown"
+          },
+          "client_ts_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ts Ms",
+            "description": "Client timestamp from binary frame header"
+          },
+          "server_recv_ts_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Recv Ts Ms",
+            "description": "Server receipt timestamp"
+          },
+          "server_send_ts_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Send Ts Ms",
+            "description": "Server dispatch timestamp"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelMeta"
+          },
+          "why": {
+            "items": {
+              "$ref": "#/components/schemas/WhyItem"
+            },
+            "type": "array",
+            "title": "Why",
+            "description": "Auditable computed measurement signals"
+          },
+          "mock": {
+            "type": "boolean",
+            "title": "Mock",
+            "description": "True ONLY when generated by mock engine",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "call_id",
+          "window_index",
+          "window",
+          "band",
+          "outcome",
+          "evidence",
+          "language",
+          "latency_ms",
+          "model"
+        ],
+        "title": "ScoreEvent",
+        "description": "Emitted after first 3.5s of audio, then every 1.75s hop.\nPrimary voice authenticity signal."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WhyItem": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "Computed metric kind (e.g. 'window_score', 'speech_seconds', 'snr_db', 'model_agreement', 'synthetic_score', 'replay_score', 'supporting_heuristic')"
+          },
+          "text_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Key",
+            "description": "Localization key for UI rendering"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Value",
+            "description": "Exact computed measurement"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "WhyItem",
+        "description": "Computed, auditable explanation item.\nNOTE: Free-form text explanations are strictly forbidden by AGENTS.md."
+      },
+      "WindowBounds": {
+        "properties": {
+          "start_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Ms",
+            "description": "Start offset of window in call audio (ms)"
+          },
+          "end_ms": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Ms",
+            "description": "End offset of window in call audio (ms)"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "start_ms",
+          "end_ms"
+        ],
+        "title": "WindowBounds"
+      }
+    }
+  }
+}

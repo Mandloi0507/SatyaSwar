@@ -1,0 +1,32 @@
+# SatyaSwar ML Core Dependencies
+# Python >= 3.10 required
+torch
+torchaudio
+transformers
+safetensors
+huggingface_hub
+soundfile
+librosa
+scipy
+numpy
+pandas
+scikit-learn
+pyyaml
+python-dotenv
+silero-vad
+faster-whisper
+rapidfuzz
+indic-transliteration
+fastapi
+uvicorn
+websockets
+pydantic>=2.0
+edge-tts
+matplotlib
+tabulate
+
+# Dev & Testing
+pytest>=7.0
+pytest-asyncio>=0.20
+httpx
+ruff

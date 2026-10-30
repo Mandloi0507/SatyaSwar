@@ -44,3 +44,4 @@
 - [x] **Calibrated Risk Terminology:** The decision engine avoids absolute claims such as "guaranteed real voice", using calibrated phrasing ("lower spoof risk", "likely impersonation").
 - [x] **Zero-Trust Verification Coupling:** High voice risk is never automatically cleared by contact verification; instead, conflicting signals trigger a hold on financial/credential actions.
 - [x] **Fail-Safe Default:** When ML services fail or time out, the system emits `analysis_unavailable`, never defaulting to a safe score.
+

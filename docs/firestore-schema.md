@@ -133,3 +133,4 @@ Keyed by auto-generated document ID.
 
 1. **`call_history`:** Each document includes an `expires_at` timestamp set to 30 days post-completion. Cloud Firestore's native TTL policy automatically deletes expired history documents without background compute costs.
 2. **`verification_requests`:** Checked lazily on read and marked `EXPIRED` once `expires_at` is surpassed.
+

@@ -121,3 +121,4 @@ class MLClient:
     async def close(self) -> None:
         """Close the underlying HTTP client session."""
         await self._client.aclose()
+

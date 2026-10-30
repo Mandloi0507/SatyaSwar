@@ -46,6 +46,7 @@ class VerificationStatus(StrEnum):
     DENIED = "DENIED"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
+    NO_CONTACT_MATCH = "NO_CONTACT_MATCH"
 
 
 class EvidenceQualityLevel(StrEnum):
@@ -59,6 +60,7 @@ class FinalOutcome(StrEnum):
     LIKELY_IMPERSONATION = "likely_impersonation"
     SUSPICIOUS = "suspicious"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    CONFLICTING_SIGNALS = "conflicting_signals"
     UNAVAILABLE = "unavailable"
 
 

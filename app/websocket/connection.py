@@ -78,3 +78,4 @@ class ConnectionManager:
 
 # Global singleton connection manager
 manager = ConnectionManager()
+

@@ -168,3 +168,4 @@ async def authenticate_websocket(
         except Exception:
             pass
         raise WebSocketDisconnect(code=WS_AUTH_FAILED_CODE)
+

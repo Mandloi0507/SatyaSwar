@@ -223,3 +223,4 @@ def test_firebase_init_duplicate_calls():
     app1 = init_firebase()
     app2 = init_firebase()
     assert app1 is app2
+

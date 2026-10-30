@@ -41,3 +41,4 @@ async def ws_auth_test(websocket: WebSocket) -> None:
         "email": user.email,
     })
     await websocket.close(code=1000, reason="Authentication test completed successfully")
+

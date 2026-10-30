@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // SatyaSwar Security Architecture:
+    // All client interactions are brokered exclusively through the authenticated
+    // FastAPI backend using the Firebase Admin SDK. Direct client access from mobile
+    // clients is strictly denied to ensure ownership enforcement, validation, and privacy.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

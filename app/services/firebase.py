@@ -104,3 +104,4 @@ def verify_id_token(token: str, check_revoked: bool = True) -> dict[str, Any]:
     init_firebase()
     # Note: Tokens are never logged to prevent credential leakage.
     return auth.verify_id_token(token, check_revoked=check_revoked)
+

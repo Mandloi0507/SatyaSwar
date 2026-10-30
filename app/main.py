@@ -7,6 +7,7 @@ configured origins, defines core system lifecycle events via lifespan, and expos
 root and health-check endpoints.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -14,6 +15,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routes.auth import router as auth_router
+from app.services.firebase import init_firebase
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -21,10 +26,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifespan manager.
     Handles startup and shutdown events for the FastAPI application.
-    NOTE: Firebase Admin SDK initialization will be added in M2.
+    Initializes Firebase Admin SDK on application startup.
     """
     # Startup: Load and validate settings
     _ = get_settings()
+    try:
+        init_firebase()
+    except Exception as e:
+        logger.warning("Firebase Admin initialization deferred: %s", e)
     yield
     # Shutdown: Clean up external connections (if any)
 
@@ -66,6 +75,10 @@ async def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+# M2: Authentication Routes
+app.include_router(auth_router)
+
+
 # Router registration placeholders for upcoming modules:
 # M4: REST APIs & Session Management
 # app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
@@ -73,3 +86,4 @@ async def health() -> dict[str, str]:
 # app.include_router(calls_router, prefix="/api/v1/calls", tags=["Calls"])
 # M7: Trusted-Contact Verification
 # app.include_router(verification_router, prefix="/api/v1/verification", tags=["Verification"])
+

@@ -311,3 +311,4 @@ def remove_contact(owner_uid: str, contact_uid: str) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
 
     logger.info("Unlinked contact relationship between uid=%s and uid=%s", owner_uid, contact_uid)
+

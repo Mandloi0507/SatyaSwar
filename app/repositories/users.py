@@ -184,3 +184,4 @@ def execute_complete_account_deletion(uid: str) -> None:
         logger.warning("Firebase Auth user already missing during deletion: uid=%s", uid)
     except Exception as e:
         logger.error("Error deleting Firebase Auth user: uid=%s, error=%s", uid, e)
+

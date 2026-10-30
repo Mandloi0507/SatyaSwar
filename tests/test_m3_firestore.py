@@ -388,3 +388,4 @@ def test_verification_challenge_code_attempts(mock_db):
 
     final_req = get_verification_request(req.id, "resp_ch")
     assert final_req.status == VerificationStatus.DENIED
+

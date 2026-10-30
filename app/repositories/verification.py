@@ -278,3 +278,4 @@ def cancel_verification_request(request_id: str, requester_uid: str) -> Verifica
     logger.info("Verification request %s cancelled by requester %s", request_id, requester_uid)
 
     return get_verification_request(request_id, requester_uid)
+

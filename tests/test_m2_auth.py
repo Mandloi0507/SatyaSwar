@@ -64,7 +64,9 @@ def test_rest_auth_missing_token(client):
     """Verify that a request lacking the Authorization header returns HTTP 401."""
     response = client.get("/api/v1/auth/me-check")
     assert response.status_code == 401
-    assert "Missing bearer authorization credentials" in response.json()["detail"]
+    err = response.json()["error"]
+    assert err["code"] == "UNAUTHORIZED"
+    assert "Missing bearer authorization credentials" in err["message"]
 
 
 def test_rest_auth_invalid_token(client):
@@ -78,7 +80,9 @@ def test_rest_auth_invalid_token(client):
             headers={"Authorization": "Bearer invalid-token"},
         )
         assert response.status_code == 401
-        assert response.json()["detail"] == "Invalid or expired authentication token"
+        err = response.json()["error"]
+        assert err["code"] == "UNAUTHORIZED"
+        assert err["message"] == "Invalid or expired authentication token"
 
 
 def test_rest_auth_expired_token(client):
@@ -92,7 +96,9 @@ def test_rest_auth_expired_token(client):
             headers={"Authorization": "Bearer expired-token"},
         )
         assert response.status_code == 401
-        assert response.json()["detail"] == "Invalid or expired authentication token"
+        err = response.json()["error"]
+        assert err["code"] == "UNAUTHORIZED"
+        assert err["message"] == "Invalid or expired authentication token"
 
 
 def test_rest_auth_revoked_token(client):
@@ -106,7 +112,9 @@ def test_rest_auth_revoked_token(client):
             headers={"Authorization": "Bearer revoked-token"},
         )
         assert response.status_code == 401
-        assert response.json()["detail"] == "Invalid or expired authentication token"
+        err = response.json()["error"]
+        assert err["code"] == "UNAUTHORIZED"
+        assert err["message"] == "Invalid or expired authentication token"
 
 
 def test_rest_auth_disabled_user(client):
@@ -120,7 +128,9 @@ def test_rest_auth_disabled_user(client):
             headers={"Authorization": "Bearer disabled-user-token"},
         )
         assert response.status_code == 401
-        assert response.json()["detail"] == "Invalid or expired authentication token"
+        err = response.json()["error"]
+        assert err["code"] == "UNAUTHORIZED"
+        assert err["message"] == "Invalid or expired authentication token"
 
 
 # ==============================================================================

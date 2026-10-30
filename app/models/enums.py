@@ -67,3 +67,4 @@ class ActionType(StrEnum):
     OTP_CREDENTIALS = "otp_credentials"
     CONFIDENTIAL_INFO = "confidential_info"
     OTHER = "other"
+

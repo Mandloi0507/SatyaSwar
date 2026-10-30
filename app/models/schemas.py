@@ -5,10 +5,10 @@ Member 2: Backend, Infrastructure, Database and Security
 Defines Pydantic models for database documents, repository objects, and API data transfers.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.models.enums import (
     AccountStatus,
@@ -34,6 +34,18 @@ class UserProfile(BaseModel):
     account_status: AccountStatus = Field(default=AccountStatus.ACTIVE, description="Account lifecycle status")
     created_at: Optional[Any] = Field(default=None, description="Server timestamp of creation")
     updated_at: Optional[Any] = Field(default=None, description="Server timestamp of last update")
+
+    @field_serializer("created_at", "updated_at", check_fields=False)
+    def serialize_timestamps(self, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if hasattr(v, "isoformat"):
+            return v.isoformat()
+        if hasattr(v, "__class__") and "Sentinel" in v.__class__.__name__:
+            return datetime.now(timezone.utc).isoformat()
+        return str(v)
 
 
 class UserUpdate(BaseModel):
@@ -64,6 +76,66 @@ class TrustedContact(BaseModel):
     created_at: Optional[Any] = Field(default=None, description="Server timestamp of creation")
     updated_at: Optional[Any] = Field(default=None, description="Server timestamp of last update")
 
+    @field_serializer("created_at", "updated_at", check_fields=False)
+    def serialize_timestamps(self, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if hasattr(v, "isoformat"):
+            return v.isoformat()
+        if hasattr(v, "__class__") and "Sentinel" in v.__class__.__name__:
+            return datetime.now(timezone.utc).isoformat()
+        return str(v)
+
+
+class InviteCreateRequest(BaseModel):
+    """Payload to generate a new trusted-contact invite."""
+
+    invitee_email: Optional[str] = Field(default=None, description="Optional target email address")
+
+
+class InviteCreateResponse(BaseModel):
+    """Response containing single-use invite code, expiration, and QR code payload."""
+
+    code: str = Field(description="Single-use random invitation code (e.g. 'K7M2-9QX4')")
+    expires_at: datetime = Field(description="ISO 8601 UTC expiration timestamp")
+    qr_payload: str = Field(description="Standardized QR code content: satyaswar:invite:<code>")
+
+
+class InviteAcceptRequest(BaseModel):
+    """Payload to accept an invitation code."""
+
+    code: str = Field(min_length=4, max_length=32, description="Invitation code received from contact")
+    alias: Optional[str] = Field(default=None, max_length=50, description="Owner-specific personal alias")
+    label: Optional[str] = Field(default=None, max_length=50, description="Disambiguation label for duplicate names")
+
+
+class ContactUpdateRequest(BaseModel):
+    """Payload to update custom alias or label for an existing contact."""
+
+    alias: Optional[str] = Field(default=None, max_length=50, description="Updated personal alias")
+    label: Optional[str] = Field(default=None, max_length=50, description="Updated disambiguation label")
+
+
+class CallCreateRequest(BaseModel):
+    """Payload to initialize a new call analysis session."""
+
+    scenario_id: Optional[str] = Field(default=None, description="Preset test scenario identifier")
+    claimed_name: Optional[str] = Field(default=None, description="Name claimed by the caller")
+    caller_number: Optional[str] = Field(default="Unknown", description="Caller phone number or identifier")
+    direction: Optional[str] = Field(default="incoming", description="Call direction (incoming | outgoing)")
+
+
+class CallCreateResponse(BaseModel):
+    """Response containing created session ID and WebSocket connection endpoint."""
+
+    session_id: str = Field(description="Unique session ID")
+    status: SessionStatus = Field(description="Initial session status (CREATED)")
+    ws_url: str = Field(description="WebSocket endpoint URL for audio streaming")
+    config: dict[str, Any] = Field(description="Agreed audio slicing and window parameters")
+    server_time: datetime = Field(description="Server timestamp in UTC")
+
 
 class CallSession(BaseModel):
     """Firestore 'call_sessions' document schema representing live session state."""
@@ -82,6 +154,18 @@ class CallSession(BaseModel):
     window_count: int = Field(default=0, ge=0, description="Number of audio analysis windows processed")
     created_at: Optional[Any] = Field(default=None, description="Server timestamp of creation")
     updated_at: Optional[Any] = Field(default=None, description="Server timestamp of last update")
+
+    @field_serializer("created_at", "updated_at", check_fields=False)
+    def serialize_timestamps(self, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if hasattr(v, "isoformat"):
+            return v.isoformat()
+        if hasattr(v, "__class__") and "Sentinel" in v.__class__.__name__:
+            return datetime.now(timezone.utc).isoformat()
+        return str(v)
 
 
 class VerificationRequest(BaseModel):
@@ -136,3 +220,4 @@ class DeviceToken(BaseModel):
     token: str = Field(description="FCM registration token")
     platform: str = Field(default="android", description="Client device platform (android | ios)")
     updated_at: Optional[Any] = Field(default=None, description="Server timestamp of registration/update")
+

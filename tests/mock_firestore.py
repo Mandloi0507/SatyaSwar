@@ -8,7 +8,21 @@ queries, and mutations to enable fast, offline, deterministic unit testing.
 
 import uuid
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional
+
+
+def _resolve_sentinels(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Replaces Firestore server sentinels (e.g. SERVER_TIMESTAMP) with actual UTC datetimes."""
+    resolved = {}
+    for k, v in data.items():
+        if isinstance(v, dict):
+            resolved[k] = _resolve_sentinels(v)
+        elif hasattr(v, "__class__") and "Sentinel" in v.__class__.__name__:
+            resolved[k] = datetime.now(timezone.utc)
+        else:
+            resolved[k] = deepcopy(v)
+    return resolved
 
 
 class MockDocumentSnapshot:
@@ -43,15 +57,16 @@ class MockDocumentReference:
         return MockDocumentSnapshot(self.id, data)
 
     def set(self, data: Dict[str, Any], merge: bool = False) -> None:
+        clean = _resolve_sentinels(data)
         if merge and self.id in self.collection.store:
-            self.collection.store[self.id].update(deepcopy(data))
+            self.collection.store[self.id].update(clean)
         else:
-            self.collection.store[self.id] = deepcopy(data)
+            self.collection.store[self.id] = clean
 
     def update(self, data: Dict[str, Any]) -> None:
         if self.id not in self.collection.store:
             raise KeyError(f"Document {self.id} does not exist")
-        self.collection.store[self.id].update(deepcopy(data))
+        self.collection.store[self.id].update(_resolve_sentinels(data))
 
     def delete(self) -> None:
         self.collection.store.pop(self.id, None)

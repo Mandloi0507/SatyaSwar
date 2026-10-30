@@ -11,11 +11,17 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.models.errors import SatyaSwarException
 from app.routes.auth import router as auth_router
+from app.routes.calls import router as calls_router
+from app.routes.contacts import router as contacts_router
+from app.routes.users import router as users_router
 from app.services.firebase import init_firebase
 
 logger = logging.getLogger(__name__)
@@ -75,15 +81,69 @@ async def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+# Standard Error Envelope Exception Handlers (Section 9.5)
+STATUS_CODE_MAP = {
+    400: "BAD_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "NOT_FOUND",
+    409: "CONFLICT",
+    410: "GONE",
+    422: "VALIDATION_ERROR",
+    429: "TOO_MANY_REQUESTS",
+    500: "INTERNAL_SERVER_ERROR",
+    503: "SERVICE_UNAVAILABLE",
+}
+
+
+@app.exception_handler(SatyaSwarException)
+async def satyaswar_exception_handler(request: Request, exc: SatyaSwarException) -> JSONResponse:
+    """Handles explicit SatyaSwar application exceptions with standardized error codes."""
+    payload = {
+        "error": {
+            "code": exc.code,
+            "message": exc.message,
+        }
+    }
+    if exc.details is not None:
+        payload["error"]["details"] = exc.details
+    return JSONResponse(status_code=exc.status_code, content=payload, headers=exc.headers)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Wraps FastAPI/Starlette HTTPExceptions in standard error envelope."""
+    code = STATUS_CODE_MAP.get(exc.status_code, "HTTP_ERROR")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": code, "message": str(exc.detail)}},
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Wraps request schema validation failures in standard error envelope."""
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "Request validation failed",
+                "details": exc.errors(),
+            }
+        },
+    )
+
+
 # M2: Authentication Routes
 app.include_router(auth_router)
 
-
-# Router registration placeholders for upcoming modules:
 # M4: REST APIs & Session Management
-# app.include_router(users_router, prefix="/api/v1/users", tags=["Users"])
-# app.include_router(contacts_router, prefix="/api/v1/contacts", tags=["Contacts"])
-# app.include_router(calls_router, prefix="/api/v1/calls", tags=["Calls"])
-# M7: Trusted-Contact Verification
+app.include_router(users_router)
+app.include_router(contacts_router)
+app.include_router(calls_router)
+
+# M7: Trusted-Contact Verification (placeholder)
 # app.include_router(verification_router, prefix="/api/v1/verification", tags=["Verification"])
 

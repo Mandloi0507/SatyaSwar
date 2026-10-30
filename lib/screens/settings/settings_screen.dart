@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -15,11 +18,15 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _serverUrlController = TextEditingController(
-    text: AppConfig.defaultServerUrl,
-  );
-  bool _useMocks = true;
+  late final TextEditingController _serverUrlController;
   double _alertVolume = 0.85;
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = context.read<SettingsProvider>();
+    _serverUrlController = TextEditingController(text: settings.serverAddress);
+  }
 
   @override
   void dispose() {
@@ -27,17 +34,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  void _testConnection() {
+  void _testConnection() async {
+    final settings = context.read<SettingsProvider>();
+    await settings.updateServerAddress(_serverUrlController.text.trim());
+    final success = await settings.testConnection();
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Testing connection to ${_serverUrlController.text}...'),
-        duration: const Duration(seconds: 2),
+        content: Text(
+          success
+              ? 'Connected successfully to ${settings.serverAddress} (HTTP 200)'
+              : 'Connection failed to ${settings.serverAddress}. Check network / host.',
+        ),
+        backgroundColor: success ? AppColors.success : AppColors.danger,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
+  void _handleSignOut() async {
+    final auth = context.read<AuthProvider>();
+    await auth.signOut();
+    if (!mounted) return;
+    context.go('/login');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+
     return AppScaffold(
       appBar: AppBar(title: const Text('Application Settings')),
       body: ListView(
@@ -63,7 +89,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Backend Host Endpoint',
                   style: AppTextStyles.sectionHeader,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
+                const Text(
+                  'FastAPI server address for live WebSocket analysis',
+                  style: AppTextStyles.caption,
+                ),
+                const SizedBox(height: 10),
                 TextFormField(
                   controller: _serverUrlController,
                   style: const TextStyle(
@@ -77,13 +108,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: AppColors.textSecondary,
                     ),
                   ),
+                  onChanged: (val) => settings.updateServerAddress(val),
                 ),
                 const SizedBox(height: 14),
                 PrimaryButton(
-                  label: 'Test Connection',
+                  label: settings.isTestingConnection
+                      ? 'Testing...'
+                      : 'Test Connection',
                   variant: ButtonVariant.secondary,
                   icon: Icons.network_check_rounded,
                   height: 44,
+                  isLoading: settings.isTestingConnection,
                   onPressed: _testConnection,
                 ),
               ],
@@ -114,9 +149,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'Simulates server risk scores locally when laptop backend is unreachable.',
                     style: AppTextStyles.caption,
                   ),
-                  value: _useMocks,
+                  value: settings.isMockMode,
                   activeThumbColor: AppColors.primaryGlow,
-                  onChanged: (val) => setState(() => _useMocks = val),
+                  onChanged: (val) => settings.toggleMockMode(val),
                 ),
                 const Divider(),
                 ListTile(
@@ -208,7 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  onTap: () => context.go('/login'),
+                  onTap: _handleSignOut,
                 ),
               ],
             ),

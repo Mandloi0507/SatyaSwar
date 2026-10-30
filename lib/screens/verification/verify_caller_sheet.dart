@@ -1,7 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-
+import 'package:provider/provider.dart';
+import '../../providers/contacts_provider.dart';
+import '../../providers/verification_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/glass_card.dart';
@@ -17,46 +17,33 @@ class VerifyCallerSheet extends StatefulWidget {
 }
 
 class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
-  int _currentStep =
-      1; // 1: Choose Contact, 2: Action Type, 3: Pending Challenge
+  int _currentStep = 1; // 1: Select Contact, 2: Action Type, 3: Pending Challenge
 
-  String? _selectedContact;
+  String? _selectedContactId;
+  String? _selectedContactName;
   String _selectedAction = 'money_transfer';
   final _amountController = TextEditingController();
 
-  // Challenge Code & Countdown for Step 3
-  final String _matchCode = '47';
-  int _secondsRemaining = 60;
-  Timer? _countdownTimer;
-  String _verificationStatus = 'Pending responder confirmation...';
-
   @override
   void dispose() {
-    _countdownTimer?.cancel();
     _amountController.dispose();
     super.dispose();
   }
 
-  void _startPendingVerification() {
+  void _startVerification() async {
     setState(() => _currentStep = 3);
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      if (_secondsRemaining > 1) {
-        setState(() => _secondsRemaining--);
-        if (_secondsRemaining == 52) {
-          // Simulate responder denial in synthetic test
-          setState(() {
-            _verificationStatus = 'VERIFICATION DENIED: Contact confirmed they are NOT on a call with you!';
-          });
-        }
-      } else {
-        _countdownTimer?.cancel();
-        setState(() {
-          _verificationStatus =
-              'VERIFICATION EXPIRED: No response received within 60 seconds.';
-        });
-      }
-    });
+
+    final verif = context.read<VerificationProvider>();
+    final amount = double.tryParse(_amountController.text.trim());
+
+    await verif.startVerification(
+      callId: 'call_${DateTime.now().millisecondsSinceEpoch}',
+      contactId: _selectedContactId ?? 'unknown',
+      contactName: _selectedContactName ?? widget.claimedName,
+      claimedIdentity: widget.claimedName,
+      action: _selectedAction,
+      amount: amount,
+    );
   }
 
   @override
@@ -95,8 +82,8 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
                 _currentStep == 1
                     ? 'Step 1: Select Claimed Contact'
                     : (_currentStep == 2
-                          ? 'Step 2: Requested Action'
-                          : 'Step 3: Independent Verification'),
+                        ? 'Step 2: Requested Action'
+                        : 'Step 3: Independent Verification'),
                 style: AppTextStyles.sectionHeader,
               ),
               IconButton(
@@ -105,7 +92,10 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
                   size: 20,
                   color: AppColors.textSecondary,
                 ),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  context.read<VerificationProvider>().cancelCurrent();
+                  Navigator.pop(context);
+                },
               ),
             ],
           ),
@@ -121,6 +111,9 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
   }
 
   Widget _buildStep1SelectContact() {
+    final contactsProvider = context.watch<ContactsProvider>();
+    final contacts = contactsProvider.contacts;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -130,28 +123,34 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
         ),
         const SizedBox(height: 16),
 
-        _buildContactRadioTile('Rakesh Verma (Rakesh Sir)', 'U204'),
-        _buildContactRadioTile('Priyanka Sharma (Priti)', 'U102'),
-        _buildContactRadioTile('Sunil Mehta (Sunil)', 'U309'),
+        ...contacts.map(
+          (c) => _buildContactRadioTile(
+            id: c.id,
+            name: c.name,
+            alias: c.alias,
+          ),
+        ),
+
         _buildContactRadioTile(
-          'Not in my trusted contacts list',
-          null,
+          id: 'not_matched',
+          name: 'Not in my trusted contacts list',
+          alias: 'Unmatched',
           isUnmatched: true,
         ),
 
         const SizedBox(height: 20),
         PrimaryButton(
           label: 'Continue to Action',
-          onPressed: _selectedContact != null
+          onPressed: _selectedContactId != null
               ? () {
-                  if (_selectedContact == 'not_matched') {
-                    // Refusal to proceed
+                  if (_selectedContactId == 'not_matched') {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
-                          'SatyaSwar cannot verify this caller. Do not proceed with this call.',
+                          'Security Warning: Caller is not in your trusted network. Do not execute sensitive transactions.',
                         ),
+                        backgroundColor: AppColors.danger,
                       ),
                     );
                   } else {
@@ -164,13 +163,13 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
     );
   }
 
-  Widget _buildContactRadioTile(
-    String name,
-    String? code, {
+  Widget _buildContactRadioTile({
+    required String id,
+    required String name,
+    required String alias,
     bool isUnmatched = false,
   }) {
-    final valueKey = isUnmatched ? 'not_matched' : name;
-    final isSelected = _selectedContact == valueKey;
+    final isSelected = _selectedContactId == id;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -192,13 +191,18 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
           color: isSelected ? AppColors.primaryGlow : AppColors.textSecondary,
         ),
         title: Text(
-          name,
+          alias,
           style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
         ),
-        subtitle: code != null
-            ? Text('Trusted ID: $code', style: AppTextStyles.caption)
-            : null,
-        onTap: () => setState(() => _selectedContact = valueKey),
+        subtitle: isUnmatched
+            ? null
+            : Text(name, style: AppTextStyles.caption),
+        onTap: () {
+          setState(() {
+            _selectedContactId = id;
+            _selectedContactName = name;
+          });
+        },
       ),
     );
   }
@@ -252,7 +256,7 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
         PrimaryButton(
           label: 'Send Verification Challenge',
           icon: Icons.send_rounded,
-          onPressed: _startPendingVerification,
+          onPressed: _startVerification,
         ),
       ],
     );
@@ -293,12 +297,42 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
   }
 
   Widget _buildStep3PendingChallenge() {
-    final isDenied = _verificationStatus.contains('DENIED');
+    final verif = context.watch<VerificationProvider>();
+    final req = verif.currentRequest;
+
+    if (req == null) {
+      return const Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final isDenied = req.isDenied;
+    final isConfirmed = req.isConfirmed;
+    final isExpired = req.isExpired;
+
+    Color statusColor = AppColors.primaryGlow;
+    String statusText = 'Pending responder confirmation...';
+    IconData statusIcon = Icons.sync_rounded;
+
+    if (isDenied) {
+      statusColor = AppColors.danger;
+      statusText = 'VERIFICATION DENIED: Contact confirmed they are NOT on a call with you!';
+      statusIcon = Icons.dangerous_rounded;
+    } else if (isConfirmed) {
+      statusColor = AppColors.success;
+      statusText = 'VERIFIED: Contact confirmed they are on this call with you.';
+      statusIcon = Icons.check_circle_rounded;
+    } else if (isExpired) {
+      statusColor = AppColors.warning;
+      statusText = 'EXPIRED: No response received within 45 seconds.';
+      statusIcon = Icons.timer_off_rounded;
+    }
 
     return Column(
       children: [
         const Text(
-          'A secure push challenge has been sent to the claimed contact\'s registered device. Ask them to confirm this match code:',
+          'A secure challenge has been sent to the claimed contact\'s registered device. Ask them to confirm this match code:',
           style: AppTextStyles.bodySecondary,
           textAlign: TextAlign.center,
         ),
@@ -315,9 +349,9 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                _matchCode,
+                req.matchCode,
                 style: const TextStyle(
-                  fontSize: 52,
+                  fontSize: 44,
                   fontWeight: FontWeight.w700,
                   fontFamily: 'monospace',
                   letterSpacing: 4,
@@ -326,9 +360,9 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                '$_secondsRemaining s remaining',
+                '${req.remainingSeconds}s remaining',
                 style: TextStyle(
-                  color: _secondsRemaining < 15
+                  color: req.remainingSeconds < 15
                       ? AppColors.danger
                       : AppColors.warning,
                   fontWeight: FontWeight.w600,
@@ -340,47 +374,79 @@ class _VerifyCallerSheetState extends State<VerifyCallerSheet> {
         ),
         const SizedBox(height: 16),
 
-        // Status line
+        // Status banner
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDenied
-                ? AppColors.danger.withValues(alpha: 0.18)
-                : AppColors.surfaceHigh,
+            color: statusColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isDenied ? AppColors.danger : AppColors.border,
-            ),
+            border: Border.all(color: statusColor),
           ),
           child: Row(
             children: [
-              Icon(
-                isDenied ? Icons.dangerous_rounded : Icons.sync_rounded,
-                color: isDenied ? AppColors.danger : AppColors.primaryGlow,
-              ),
+              Icon(statusIcon, color: statusColor),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _verificationStatus,
+                  statusText,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: isDenied ? FontWeight.w700 : FontWeight.w500,
-                    color: isDenied ? AppColors.danger : AppColors.textPrimary,
+                    color: statusColor,
                   ),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
+
+        // Responder Simulation Buttons (for hackathon demo)
+        if (req.isPending) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.success,
+                    side: const BorderSide(color: AppColors.success),
+                  ),
+                  onPressed: () {
+                    verif.responderApprove(req.requestId);
+                  },
+                  child: const Text('Simulate Confirm'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: AppColors.danger),
+                  ),
+                  onPressed: () {
+                    verif.responderDeny(req.requestId);
+                  },
+                  child: const Text('Simulate Deny'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+        ],
 
         PrimaryButton(
-          label: isDenied ? 'Close & Take Action' : 'Cancel Verification',
+          label: isDenied || isConfirmed || isExpired
+              ? 'Close'
+              : 'Cancel Verification',
           variant: isDenied
               ? ButtonVariant.destructive
               : ButtonVariant.secondary,
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            verif.cancelCurrent();
+            Navigator.pop(context);
+          },
         ),
       ],
     );

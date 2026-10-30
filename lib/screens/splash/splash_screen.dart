@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../config/app_config.dart';
+import '../../providers/auth_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -21,10 +23,17 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkInitialState() async {
-    // Artificial delay for splash presentation and session check
+    // Splash presentation delay and session check
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
-    context.go('/home');
+
+    // Check if user is authenticated
+    final auth = context.read<AuthProvider>();
+    if (auth.isAuthenticated) {
+      context.go('/home');
+    } else {
+      context.go('/login');
+    }
   }
 
   @override

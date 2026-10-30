@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/risk_band.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/call_history_provider.dart';
+import '../../providers/contacts_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -15,6 +20,15 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final settings = context.watch<SettingsProvider>();
+    final contacts = context.watch<ContactsProvider>();
+    final history = context.watch<CallHistoryProvider>();
+
+    final userName = auth.currentUser?.displayName ?? 'User';
+    final contactCount = contacts.contacts.length;
+    final recentCalls = history.records.take(3).toList();
+
     return AppScaffold(
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
@@ -35,12 +49,41 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text('Priyanka Mandloi', style: AppTextStyles.title),
+                    Text(userName, style: AppTextStyles.title),
                   ],
                 ),
-                const StatusChip(
-                  label: 'Protection Ready',
-                  tone: StatusTone.success,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (settings.isMockMode)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.warning.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: const Text(
+                          'MOCK',
+                          style: TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    const StatusChip(
+                      label: 'Protection Ready',
+                      tone: StatusTone.success,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -122,21 +165,24 @@ class HomeScreen extends StatelessWidget {
                   child: GlassCard(
                     padding: const EdgeInsets.all(14),
                     onTap: () => context.go('/contacts'),
-                    child: const Column(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.shield_outlined,
                           color: AppColors.primaryGlow,
                           size: 24,
                         ),
-                        SizedBox(height: 10),
-                        Text(
+                        const SizedBox(height: 10),
+                        const Text(
                           'Trusted Contacts',
                           style: AppTextStyles.sectionHeader,
                         ),
-                        SizedBox(height: 2),
-                        Text('3 Registered', style: AppTextStyles.caption),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$contactCount Registered',
+                          style: AppTextStyles.caption,
+                        ),
                       ],
                     ),
                   ),
@@ -164,40 +210,50 @@ class HomeScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
-            // 4. Recent Calls List Header
+            // 4. Recent Calls Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Recent Calls', style: AppTextStyles.sectionHeader),
+                const Text('Recent Calls', style: AppTextStyles.subtitle),
                 TextButton(
                   onPressed: () => context.go('/history'),
                   child: const Text('View All'),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
 
-            // Sample Recent Call 1
-            _buildRecentCallTile(
-              caller: 'Rakesh Sir (CEO)',
-              timeAgo: '15 min ago',
-              band: RiskBand.high,
-              riskIndex: 91,
-              verification: 'Denied',
-              onTap: () => context.push('/history/call_01'),
-            ),
-            const SizedBox(height: 10),
-            // Sample Recent Call 2
-            _buildRecentCallTile(
-              caller: 'Priyanka (Family)',
-              timeAgo: '2 hours ago',
-              band: RiskBand.low,
-              riskIndex: 12,
-              verification: 'Confirmed',
-              onTap: () => context.push('/history/call_02'),
-            ),
+            if (recentCalls.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Center(
+                  child: Text(
+                    'No recent simulated calls yet.',
+                    style: AppTextStyles.bodySecondary,
+                  ),
+                ),
+              )
+            else
+              ...recentCalls.map(
+                (call) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10.0),
+                  child: _buildRecentCallTile(
+                    caller: call.callerName,
+                    timeAgo: _formatTimeAgo(call.timestamp),
+                    band: call.peakRiskBand,
+                    riskIndex: call.peakRiskScore,
+                    verification: call.verificationStatus == 'confirmed'
+                        ? 'Confirmed'
+                        : (call.verificationStatus == 'denied'
+                            ? 'Denied'
+                            : 'Unverified'),
+                    onTap: () => context.push('/history/${call.id}'),
+                  ),
+                ),
+              ),
+
             const SizedBox(height: 24),
 
             // 5. Mandatory Prototype Disclaimer Footer (GEMINI.md Rule 2)
@@ -233,6 +289,17 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatTimeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) {
+      return '${diff.inMinutes} min ago';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours} hours ago';
+    } else {
+      return '${diff.inDays} days ago';
+    }
   }
 
   Widget _buildRecentCallTile({

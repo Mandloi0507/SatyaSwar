@@ -3,8 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../../models/call_history_record.dart';
 import '../../models/risk_band.dart';
+import '../../providers/call_history_provider.dart';
+import '../../providers/risk_monitor_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../services/alert_service.dart';
 import '../../services/audio_frame_builder.dart';
 import '../../services/audio_player_service.dart';
 import '../../services/wav_parser.dart';
@@ -37,6 +43,7 @@ class ActiveCallScreen extends StatefulWidget {
 class _ActiveCallScreenState extends State<ActiveCallScreen> {
   // Audio Pipeline Components
   final AudioPlayerService _playerService = AudioPlayerService();
+  AlertService? _alertService;
   WindowSender? _windowSender;
   WindowPlanner? _windowPlanner;
   WavData? _wavData;
@@ -44,16 +51,6 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
 
   Timer? _callTimer;
   int _secondsElapsed = 0;
-
-  // Real-time analysis state
-  double _riskScore = 14.0;
-  RiskBand _currentBand = RiskBand.low;
-  final List<int> _timelineScores = [];
-  int _windowsAnalysed = 0;
-  double _speechSeconds = 0.0;
-  int _lastLatencyMs = 320;
-  String _latestAlert =
-      'Acoustic parameters nominal. Analysing speech windows.';
 
   @override
   void initState() {
@@ -74,11 +71,25 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         'ActiveCallScreen',
       );
 
-      // 1. Load audio asset bytes from rootBundle
+      // 1. Initialize AlertService with volume ducking
+      _alertService = AlertService(audioPlayerService: _playerService);
+      final riskMonitor = context.read<RiskMonitorProvider>();
+      riskMonitor.attachAlertService(_alertService!);
+
+      final settings = context.read<SettingsProvider>();
+      final callId = 'call_${DateTime.now().millisecondsSinceEpoch}';
+      await riskMonitor.startAnalysis(
+        callId: callId,
+        scenarioId: scenarioId,
+        isMockMode: settings.isMockMode,
+        serverBaseAddress: settings.serverAddress,
+      );
+
+      // 2. Load audio asset bytes from rootBundle
       final ByteData data = await rootBundle.load(assetPath);
       final bytes = data.buffer.asUint8List();
 
-      // 2. Parse and validate 16 kHz mono PCM16 format
+      // 3. Parse and validate 16 kHz mono PCM16 format
       _wavData = WavParser.parse(bytes);
       _windowPlanner = WindowPlanner(totalSamples: _wavData!.totalSamples);
 
@@ -87,7 +98,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         'ActiveCallScreen',
       );
 
-      // 3. Setup WindowSender synchronized with playback position
+      // 4. Setup WindowSender synchronized with playback position
       _windowSender = WindowSender(
         positionStream: _playerService.positionStream,
         playerStateStream: _playerService.playerStateStream,
@@ -97,7 +108,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         onFrame: _onAudioWindowEmitted,
       );
 
-      // 4. Load audio into player and start playback
+      // 5. Load audio into player and start playback
       await _playerService.loadAsset(assetPath);
       _windowSender!.start();
       await _playerService.play();
@@ -112,61 +123,12 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         st,
         'ActiveCallScreen',
       );
-      if (mounted) {
-        setState(() {
-          _latestAlert =
-              'Demo audio clip unavailable. Using simulated speech stream.';
-        });
-      }
     }
   }
 
   void _onAudioWindowEmitted(Uint8List frame, int seq, DateTime sentAt) {
     if (!mounted) return;
-
-    final scenarioId =
-        widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
-    int windowScore;
-
-    // Deterministic progression mapped to scenario
-    if (scenarioId == 'clone_ceo') {
-      // Escalates to synthetic detection after initial windows
-      if (seq < 2) {
-        windowScore = 18 + seq * 4;
-      } else if (seq < 4) {
-        windowScore = 48 + seq * 5;
-      } else {
-        windowScore = 82 + (seq % 3) * 4;
-      }
-    } else {
-      // Genuine call remains low risk
-      windowScore = 10 + (seq % 3) * 3;
-    }
-
-    setState(() {
-      _windowsAnalysed = seq + 1;
-      _speechSeconds = (_windowsAnalysed * 1.75).clamp(0.0, 30.0);
-      _lastLatencyMs = 280 + (seq * 15) % 90;
-      _timelineScores.add(windowScore);
-      _riskScore = windowScore.toDouble();
-
-      if (windowScore >= 65) {
-        _currentBand = RiskBand.high;
-        _latestAlert = 'WARNING: High probability of synthetic voice cloning.';
-      } else if (windowScore >= 35) {
-        _currentBand = RiskBand.medium;
-        _latestAlert =
-            'Acoustic anomaly detected. Suspicious vocal pitch stability.';
-      } else {
-        _currentBand = RiskBand.low;
-        _latestAlert = 'Acoustic parameters nominal. Natural vocal prosody.';
-      }
-    });
-
-    AppLogger.d(
-      'Window $seq emitted (${frame.length} bytes), score: $windowScore, band: ${_currentBand.name}',
-      'ActiveCallScreen',
-    );
+    context.read<RiskMonitorProvider>().ingestFrame(frame);
   }
 
   void _startCallTimer() {
@@ -182,6 +144,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     _windowSender?.dispose();
     _playerService.stop();
     _playerService.dispose();
+    _alertService?.dispose();
     super.dispose();
   }
 
@@ -190,17 +153,47 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     _windowSender?.dispose();
     _playerService.stop();
 
+    final riskMonitor = context.read<RiskMonitorProvider>();
+    final history = context.read<CallHistoryProvider>();
+
+    final scenarioId =
+        widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
+    final claimedName =
+        widget.scenarioData?['claimedName'] as String? ?? 'Rakesh Sir';
+    final peakRisk = riskMonitor.peakScore.round();
+    final peakBand = riskMonitor.currentBand;
+
+    // Record scores-only call history (never stores raw audio or transcripts)
+    final record = CallHistoryRecord(
+      id: 'call_${DateTime.now().millisecondsSinceEpoch}',
+      callerName: claimedName,
+      callerNumber:
+          widget.scenarioData?['callerNumber'] as String? ?? '+91 98200 11223',
+      timestamp: DateTime.now(),
+      durationSeconds: _secondsElapsed,
+      peakRiskScore: peakRisk,
+      peakRiskBand: peakBand,
+      evidenceQuality: riskMonitor.evidenceQuality,
+      verificationStatus: 'unverified',
+      finalOutcome: peakBand == RiskBand.high
+          ? 'Likely Impersonation'
+          : 'No synthetic indicators detected',
+      timelineScores: List.of(riskMonitor.timelineScores),
+    );
+
+    history.addRecord(record);
+
     context.pushReplacement(
       '/call/outcome',
       extra: {
-        'scenarioId': widget.scenarioData?['scenarioId'] ?? 'clone_ceo',
-        'claimedName': widget.scenarioData?['claimedName'] ?? 'Rakesh Sir',
-        'peakRiskIndex': _riskScore.round(),
-        'peakBand': _currentBand,
+        'scenarioId': scenarioId,
+        'claimedName': claimedName,
+        'peakRiskIndex': peakRisk,
+        'peakBand': peakBand,
         'verificationStatus': 'Unverified',
-        'finalOutcome': _currentBand == RiskBand.high
+        'finalOutcome': peakBand == RiskBand.high
             ? 'Likely Impersonation'
-            : 'Genuine Call',
+            : 'No synthetic indicators detected',
       },
     );
   }
@@ -219,230 +212,276 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final riskMonitor = context.watch<RiskMonitorProvider>();
     final claimedName =
         widget.scenarioData?['claimedName'] as String? ?? 'Rakesh Sir';
     final durationStr = TimeFormat.formatDuration(
       Duration(seconds: _secondsElapsed),
     );
 
+    final isDanger = riskMonitor.currentBand == RiskBand.high;
+    final isAmber = riskMonitor.currentBand == RiskBand.medium;
+
     return AppScaffold(
-      safeArea: false,
-      body: Stack(
+      body: Column(
         children: [
-          // Background Gradient
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF0F172A), AppColors.background],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+          // 1. Mandatory Simulated Call Disclaimer Banner
+          const SimulatedBanner(),
+
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 12.0,
               ),
-            ),
-          ),
-
-          SafeArea(
-            child: Column(
               children: [
-                // 1. Mandatory Simulated Banner
-                const SimulatedBanner(),
-
-                // Connection Chip & Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20.0,
-                    vertical: 10.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      StatusChip(
-                        label: _isAudioReady
-                            ? 'Playback & Slicing Active'
-                            : 'Initializing Audio...',
-                        tone: _isAudioReady
-                            ? StatusTone.success
-                            : StatusTone.warning,
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceHigh,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Text(
-                          durationStr,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                            fontSize: 13,
+                // Top Header: Claimed Caller & Call Duration
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Claimed Caller',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
                           ),
                         ),
+                        const SizedBox(height: 2),
+                        Text(claimedName, style: AppTextStyles.subtitle),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceHigh,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: AppColors.danger,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                durationStr,
+                                style: const TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isAudioReady ? 'Audio Streaming' : 'Buffering Audio',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 2. High-Risk Emergency Alert Banner (when risk escalates)
+                if (isDanger || isAmber)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: (isDanger ? AppColors.danger : AppColors.warning)
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isDanger ? AppColors.danger : AppColors.warning,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isDanger
+                              ? Icons.gpp_bad_rounded
+                              : Icons.warning_amber_rounded,
+                          color: isDanger
+                              ? AppColors.danger
+                              : AppColors.warning,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            riskMonitor.latestAlertMessage,
+                            style: TextStyle(
+                              color: isDanger
+                                  ? AppColors.danger
+                                  : AppColors.warning,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // 3. Central Real-Time Semi-Circle Risk Gauge
+                GlassCard(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ),
+                  child: Column(
+                    children: [
+                      RiskMeter(
+                        riskIndex: riskMonitor.currentScore,
+                        band: riskMonitor.currentBand,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          RiskBandBadge(band: riskMonitor.currentBand),
+                          const SizedBox(width: 8),
+                          StatusChip(
+                            label: '${riskMonitor.lastLatencyMs}ms Latency',
+                            tone: StatusTone.neutral,
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
 
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 8),
-
-                        // Caller identity header
-                        Text(
-                          claimedName,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+                // 4. Evidence Quality Bar
+                GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Acoustic Evidence Quality',
+                            style: AppTextStyles.caption,
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Active Call Simulation • 16 kHz Mono PCM16 Tap',
-                          style: AppTextStyles.caption,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // 3. Central Risk Gauge
-                        GlassCard(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
-                          ),
-                          child: Column(
-                            children: [
-                              RiskMeter(
-                                riskIndex: _riskScore,
-                                band: _currentBand,
-                              ),
-                              const SizedBox(height: 12),
-                              RiskBandBadge(band: _currentBand),
-                              const SizedBox(height: 12),
-                              Text(
-                                _currentBand.fullTitle,
-                                style: AppTextStyles.caption.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-
-                        // Evidence Quality Bar
-                        EvidenceQualityBar(
-                          level: EvidenceLevel.good,
-                          usableSpeechSec: _speechSeconds,
-                        ),
-                        const SizedBox(height: 14),
-
-                        // 4. Acoustic Pipeline Diagnostics Row
-                        Row(
-                          children: [
-                            _buildStatTile(
-                              label: 'Windows',
-                              value:
-                                  '$_windowsAnalysed / ${_windowPlanner?.count ?? 9}',
-                              icon: Icons.layers_rounded,
-                            ),
-                            const SizedBox(width: 10),
-                            _buildStatTile(
-                              label: 'Speech',
-                              value: '${_speechSeconds.toStringAsFixed(1)}s',
-                              icon: Icons.mic_none_rounded,
-                            ),
-                            const SizedBox(width: 10),
-                            _buildStatTile(
-                              label: 'Latency',
-                              value: '${_lastLatencyMs}ms',
-                              icon: Icons.speed_rounded,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-
-                        // 5. Score Progression Chart
-                        ScoreTimelineChart(windowScores: _timelineScores),
-                        const SizedBox(height: 14),
-
-                        // 6. Alert Message Strip
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _currentBand == RiskBand.high
-                                ? AppColors.danger.withValues(alpha: 0.15)
-                                : AppColors.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: _currentBand == RiskBand.high
-                                  ? AppColors.danger
-                                  : AppColors.border,
+                          Text(
+                            '${(riskMonitor.evidenceQuality * 100).round()}%',
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _currentBand == RiskBand.high
-                                    ? Icons.warning_rounded
-                                    : Icons.info_outline_rounded,
-                                size: 18,
-                                color: _currentBand == RiskBand.high
-                                    ? AppColors.danger
-                                    : AppColors.primaryGlow,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  _latestAlert,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _currentBand == RiskBand.high
-                                        ? Colors.white
-                                        : AppColors.textSecondary,
-                                    fontWeight: _currentBand == RiskBand.high
-                                        ? FontWeight.w600
-                                        : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      EvidenceQualityBar(
+                        level: riskMonitor.evidenceQuality > 0.7
+                            ? EvidenceLevel.good
+                            : (riskMonitor.evidenceQuality > 0.4
+                                ? EvidenceLevel.limited
+                                : EvidenceLevel.poor),
+                        usableSpeechSec: riskMonitor.speechSeconds,
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 16),
 
-                // 7. Bottom Action Bar: Verify Caller (Always visible) & End Call
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border(
-                      top: BorderSide(color: AppColors.border, width: 1),
+                // 5. Window Analysis Stats Row
+                Row(
+                  children: [
+                    _buildStatTile(
+                      label: 'Speech Analyzed',
+                      value: '${riskMonitor.speechSeconds.toStringAsFixed(1)}s',
+                      icon: Icons.graphic_eq_rounded,
                     ),
+                    const SizedBox(width: 10),
+                    _buildStatTile(
+                      label: 'Windows Sliced',
+                      value: '${riskMonitor.windowsAnalysed}',
+                      icon: Icons.layers_rounded,
+                    ),
+                    const SizedBox(width: 10),
+                    _buildStatTile(
+                      label: 'Peak Risk',
+                      value: '${riskMonitor.peakScore.round()}',
+                      icon: Icons.shield_rounded,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 6. Real-Time Risk Progression Timeline Chart
+                GlassCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Live Risk Progression',
+                            style: AppTextStyles.caption,
+                          ),
+                          Text(
+                            '3.5s window • 1.75s hop',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ScoreTimelineChart(
+                        windowScores: riskMonitor.timelineScores.isEmpty
+                            ? [riskMonitor.currentScore.round()]
+                            : riskMonitor.timelineScores,
+                      ),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 24),
+
+                // 7. Interactive Call Actions
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
                   child: Row(
                     children: [
-                      // Verify Caller Primary Button
+                      // Independent Verification Button
                       Expanded(
                         flex: 3,
                         child: PrimaryButton(
                           label: 'Verify Caller',
                           icon: Icons.verified_user_rounded,
+                          variant: ButtonVariant.secondary,
                           onPressed: _openVerificationSheet,
                         ),
                       ),

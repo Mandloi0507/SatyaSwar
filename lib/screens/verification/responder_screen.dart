@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../providers/verification_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -15,9 +17,72 @@ class ResponderScreen extends StatefulWidget {
 class _ResponderScreenState extends State<ResponderScreen> {
   String? _selectedMatchCode;
   bool _isBiometricVerified = false;
+  bool _isAuthenticating = false;
+
+  void _handleBiometricAuth() async {
+    setState(() => _isAuthenticating = true);
+    final verif = context.read<VerificationProvider>();
+    final success = await verif.authenticateBiometric();
+    if (!mounted) return;
+    setState(() {
+      _isBiometricVerified = success;
+      _isAuthenticating = false;
+    });
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Identity verified via biometric/PIN convenience gate'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    }
+  }
+
+  void _handleApprove() async {
+    final verif = context.read<VerificationProvider>();
+    final currentReq = verif.currentRequest;
+    if (currentReq != null) {
+      await verif.responderApprove(currentReq.requestId);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Caller verification CONFIRMED as trusted contact.'),
+        backgroundColor: AppColors.success,
+      ),
+    );
+    Navigator.pop(context);
+  }
+
+  void _handleDeny() async {
+    final verif = context.read<VerificationProvider>();
+    final currentReq = verif.currentRequest;
+    if (currentReq != null) {
+      await verif.responderDeny(currentReq.requestId);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Fraud alert triggered: Impersonation reported!'),
+        backgroundColor: AppColors.danger,
+      ),
+    );
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final verif = context.watch<VerificationProvider>();
+    final req = verif.currentRequest;
+
+    final targetName = req?.claimedIdentity ?? 'Rakesh Sir';
+    final actionDesc = req?.action ?? '₹50,000 transfer';
+    final activeCode = req?.matchCode ?? 'SW79';
+
+    // Options for match code selection
+    final codeOptions = [activeCode, '47', '82'];
+
     return AppScaffold(
       appBar: AppBar(title: const Text('Responder Verification Gate')),
       body: SingleChildScrollView(
@@ -32,25 +97,25 @@ class _ResponderScreenState extends State<ResponderScreen> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: AppColors.border),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.security_update_warning_rounded,
                     color: AppColors.warning,
                     size: 28,
                   ),
-                  SizedBox(width: 14),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Incoming Verification Request',
+                        const Text(
+                          'Incoming Verification Challenge',
                           style: AppTextStyles.sectionHeader,
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          'Priyanka Mandloi is requesting caller verification for a ₹50,000 transfer.',
+                          'A user is requesting caller verification for claimed caller "$targetName" ($actionDesc).',
                           style: AppTextStyles.caption,
                         ),
                       ],
@@ -66,20 +131,20 @@ class _ResponderScreenState extends State<ResponderScreen> {
               style: AppTextStyles.caption,
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Are you on a phone call with Priyanka Mandloi right now?',
+            Text(
+              'Are you on a phone call with this person right now?',
               style: AppTextStyles.subtitle,
             ),
             const SizedBox(height: 20),
 
             const Text(
-              'Select the 2-digit match code you see on their screen:',
+              'Select the match code displayed on the caller\'s phone:',
               style: AppTextStyles.bodySecondary,
             ),
             const SizedBox(height: 12),
 
             Row(
-              children: ['47', '82', '19'].map((code) {
+              children: codeOptions.map((code) {
                 final isSelected = _selectedMatchCode == code;
                 return Expanded(
                   child: GestureDetector(
@@ -103,7 +168,7 @@ class _ResponderScreenState extends State<ResponderScreen> {
                       child: Text(
                         code,
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           fontFamily: 'monospace',
                           color: isSelected
@@ -118,7 +183,7 @@ class _ResponderScreenState extends State<ResponderScreen> {
             ),
             const SizedBox(height: 24),
 
-            // Biometric simulation gate
+            // Biometric gate
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -156,10 +221,11 @@ class _ResponderScreenState extends State<ResponderScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () =>
-                        setState(() => _isBiometricVerified = true),
+                    onPressed: _isAuthenticating ? null : _handleBiometricAuth,
                     child: Text(
-                      _isBiometricVerified ? 'Verified' : 'Authenticate',
+                      _isBiometricVerified
+                          ? 'Verified'
+                          : (_isAuthenticating ? 'Checking...' : 'Authenticate'),
                     ),
                   ),
                 ],
@@ -171,14 +237,7 @@ class _ResponderScreenState extends State<ResponderScreen> {
               label: 'YES, I am on the call (Confirm)',
               icon: Icons.check_circle_rounded,
               onPressed: _selectedMatchCode != null && _isBiometricVerified
-                  ? () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Caller verification confirmed'),
-                        ),
-                      );
-                      Navigator.pop(context);
-                    }
+                  ? _handleApprove
                   : null,
             ),
             const SizedBox(height: 12),
@@ -186,14 +245,7 @@ class _ResponderScreenState extends State<ResponderScreen> {
               label: 'NO, I am NOT on the call (Deny Fraud)',
               variant: ButtonVariant.destructive,
               icon: Icons.dangerous_rounded,
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Impersonation alert sent to requester!'),
-                  ),
-                );
-                Navigator.pop(context);
-              },
+              onPressed: _handleDeny,
             ),
           ],
         ),

@@ -60,18 +60,19 @@
   - `clone_ceo_01.wav` (21.0s, 336,000 samples) $\rightarrow$ exactly **11 windows** ($1 + \frac{336,000 - 56,000}{28,000} = 11$).
 
 ### 3.3 Modular Binary Frame Header Strategy
-- **Backend Protocol Status:** **Pending confirmation from Member 2 (Backend Team)**.
+- **Backend Protocol Status:** **PROVISIONAL — Pending confirmation from Member 2 (Backend Team)**.
 - **Design Pattern:** Strategy Pattern via `AudioFrameHeaderStrategy` abstract interface.
-- **Default Strategy:** `Proposed20ByteHeaderStrategy`:
-  - `[0..1]`: Magic bytes `0x5357` ('SW')
-  - `[2]`: Protocol Version `0x01`
-  - `[3]`: Flags (`bit 0` = `isLast`)
-  - `[4..11]`: Timestamp ms (uint64 Big-Endian)
-  - `[12..15]`: Window Index / Sequence Number (uint32 Big-Endian)
-  - `[16..19]`: Sample Count (uint32 Big-Endian, always 56,000)
-  - `[20..112019]`: PCM16 little-endian audio payload (112,000 bytes)
+- **Implemented Default Strategy:** `Proposed20ByteHeaderStrategy` (matches `Implementation.md` Section 8.5):
+  - **Encoding:** Little-Endian (`Endian.little`)
+  - `Byte 0`: Protocol Version (`0x01`, uint8)
+  - `Byte 1`: Flags (`bit 0` = `isLast`, uint8)
+  - `Bytes 2–3`: Reserved (`0x0000`, uint16)
+  - `Bytes 4–7`: Window Index / Sequence Number `seq` (uint32 little-endian)
+  - `Bytes 8–11`: Window Start Audio Offset `offsetMs` (uint32 little-endian)
+  - `Bytes 12–19`: Client Send Unix Epoch Timestamp `sendEpochMs` (uint64 little-endian)
+  - `Bytes 20–112019`: PCM16 little-endian audio payload (56,000 samples = 112,000 bytes)
   - **Total Frame Length:** 112,020 bytes.
-- **Modularity:** Any change to the 20-byte header layout confirmed by Member 2 is isolated entirely to `AudioFrameHeaderStrategy` without touching audio extraction or window synchronization.
+- **Protocol Decoupling:** Any future backend adjustments from Member 2 are strictly confined to `AudioFrameHeaderStrategy` implementations without requiring modifications to WAV parsing, window planning, or playback synchronization.
 
 ### 3.4 Playback Window Synchronization (`WindowSender`)
 - Listens to `AudioPlayerService.positionStream`.

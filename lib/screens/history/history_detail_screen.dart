@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/risk_band.dart';
+import '../../providers/call_history_provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -15,13 +18,26 @@ class HistoryDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contact =
-        itemData?['claimedContact'] as String? ?? 'Rakesh Sir (CEO)';
-    final date = itemData?['date'] as String? ?? 'Today, 03:15 PM';
-    final peakIndex = itemData?['peakRiskIndex'] as int? ?? 91;
-    final band = itemData?['peakBand'] as RiskBand? ?? RiskBand.high;
-    final verif = itemData?['verificationStatus'] as String? ?? 'Denied';
-    final outcome = itemData?['outcome'] as String? ?? 'Likely Impersonation';
+    final history = context.watch<CallHistoryProvider>();
+    final record = history.records.where((r) => r.id == callId).firstOrNull;
+
+    final contact = record?.callerName ??
+        (itemData?['claimedContact'] as String? ?? 'Rakesh Sir (CEO)');
+    final date = record != null
+        ? DateFormat('MMM d, yyyy • hh:mm a').format(record.timestamp)
+        : (itemData?['date'] as String? ?? 'Today, 03:15 PM');
+    final peakIndex = record?.peakRiskScore ??
+        (itemData?['peakRiskIndex'] as int? ?? 91);
+    final band = record?.peakRiskBand ??
+        (itemData?['peakBand'] as RiskBand? ?? RiskBand.high);
+    final verif = record?.verificationStatus ??
+        (itemData?['verificationStatus'] as String? ?? 'Denied');
+    final outcome = record?.finalOutcome ??
+        (itemData?['outcome'] as String? ?? 'Likely Impersonation');
+    final timeline = record?.timelineScores ??
+        const [14, 22, 54, 76, 88, 91];
+
+    final isConfirmed = verif.toLowerCase() == 'confirmed';
 
     return AppScaffold(
       appBar: AppBar(title: const Text('Call Record Detail')),
@@ -91,10 +107,10 @@ class HistoryDetailScreen extends StatelessWidget {
                         style: AppTextStyles.bodySecondary,
                       ),
                       Text(
-                        verif,
+                        verif.toUpperCase(),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: verif == 'Confirmed'
+                          color: isConfirmed
                               ? AppColors.success
                               : AppColors.danger,
                         ),
@@ -111,9 +127,11 @@ class HistoryDetailScreen extends StatelessWidget {
                       ),
                       Text(
                         outcome,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: AppColors.danger,
+                          color: band == RiskBand.high
+                              ? AppColors.danger
+                              : AppColors.success,
                         ),
                       ),
                     ],
@@ -128,7 +146,7 @@ class HistoryDetailScreen extends StatelessWidget {
               style: AppTextStyles.sectionHeader,
             ),
             const SizedBox(height: 12),
-            const ScoreTimelineChart(windowScores: [14, 22, 54, 76, 88, 91]),
+            ScoreTimelineChart(windowScores: timeline),
             const SizedBox(height: 24),
 
             Container(
@@ -145,11 +163,11 @@ class HistoryDetailScreen extends StatelessWidget {
                     size: 20,
                     color: AppColors.primaryGlow,
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Session callId: $callId\nThis audit trail record is preserved for fraud reporting. No acoustic media stored.',
-                      style: TextStyle(
+                      'Session callId: $callId\nThis audit trail record is preserved for fraud reporting. No acoustic media or transcripts are stored.',
+                      style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
                         height: 1.4,

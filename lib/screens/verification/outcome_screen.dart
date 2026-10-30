@@ -52,7 +52,7 @@ class OutcomeScreen extends StatelessWidget {
             Text(
               isDanger
                   ? 'Likely Impersonation Detected'
-                  : 'Voice Integrity Verified',
+                  : 'No Synthetic Indicators Detected',
               style: AppTextStyles.title.copyWith(fontSize: 24),
               textAlign: TextAlign.center,
             ),
@@ -60,7 +60,7 @@ class OutcomeScreen extends StatelessWidget {
             Text(
               isDanger
                   ? 'Do not transfer funds, share OTPs, or disclose confidential information on this call.'
-                  : 'No synthetic voice markers were identified. Always remain vigilant before executing sensitive actions.',
+                  : 'Acoustic parameters nominal. Low risk is not proof of identity—always verify independently before executing financial transactions.',
               style: AppTextStyles.bodySecondary,
               textAlign: TextAlign.center,
             ),

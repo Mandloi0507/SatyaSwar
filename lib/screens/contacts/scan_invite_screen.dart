@@ -66,18 +66,18 @@ class ScanInviteScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             PrimaryButton(
-              label: 'Simulate Scanned Code (K7M2-9QX4)',
+              label: 'Simulate Scanned Code (SW-9482)',
               icon: Icons.check_rounded,
               variant: ButtonVariant.secondary,
               onPressed: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text(
-                      'Simulated QR scan: satyaswar:invite:K7M2-9QX4',
+                      'Simulated QR scanned: SW-9482',
                     ),
                   ),
                 );
-                context.pop();
+                context.pop('SW-9482');
               },
             ),
             const SizedBox(height: 16),

@@ -22,6 +22,7 @@ from app.routes.auth import router as auth_router
 from app.routes.calls import router as calls_router
 from app.routes.contacts import router as contacts_router
 from app.routes.users import router as users_router
+from app.routes.verification import router as verification_router
 from app.services.firebase import init_firebase
 from app.websocket.call_stream import router as ws_router
 
@@ -148,6 +149,6 @@ app.include_router(calls_router)
 # M5: WebSocket Audio Streaming
 app.include_router(ws_router)
 
-# M7: Trusted-Contact Verification (placeholder)
-# app.include_router(verification_router, prefix="/api/v1/verification", tags=["Verification"])
+# M7: Trusted-Contact Verification
+app.include_router(verification_router)
 

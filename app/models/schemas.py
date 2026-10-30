@@ -188,6 +188,51 @@ class VerificationRequest(BaseModel):
     expires_at: Optional[Any] = Field(default=None, description="Expiration timestamp of the request")
     responded_at: Optional[Any] = Field(default=None, description="Timestamp when responder approved/denied")
 
+    @field_serializer("created_at", "expires_at", "responded_at", check_fields=False)
+    def serialize_timestamps(self, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if hasattr(v, "isoformat"):
+            return v.isoformat()
+        if hasattr(v, "__class__") and "Sentinel" in v.__class__.__name__:
+            return datetime.now(timezone.utc).isoformat()
+        return str(v)
+
+
+class VerificationCreateRequest(BaseModel):
+    """Payload to initiate a new trusted-contact verification request."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    session_id: Optional[str] = Field(default=None, alias="callId", description="Call session ID")
+    target_uid: Optional[str] = Field(default=None, alias="contact_id", description="Designated contact UID or relationship ID")
+    claimed_identity: Optional[str] = Field(default="Unknown", alias="claimedName", description="Caller claimed identity")
+    action_type: ActionType = Field(default=ActionType.OTHER, alias="actionType", description="Type of sensitive action")
+    amount: Optional[float] = Field(default=None, ge=0.0, description="Optional monetary amount")
+
+
+class VerificationCreateResponse(BaseModel):
+    """Response returned upon creating a verification request."""
+
+    verification_id: str = Field(description="Unique verification request ID")
+    session_id: str = Field(description="Associated call session ID")
+    target_uid: str = Field(description="Designated contact UID")
+    match_code: Optional[str] = Field(default=None, description="Match code challenge shown to caller")
+    status: VerificationStatus = Field(default=VerificationStatus.PENDING, description="Initial request status")
+    expires_at: Any = Field(description="Expiration timestamp")
+
+
+class VerificationRespondRequest(BaseModel):
+    """Payload to respond to a verification request."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    approve: Optional[bool] = Field(default=None, description="True to approve, False to deny")
+    decision: Optional[str] = Field(default=None, description="Alternative: 'confirm' or 'deny'")
+    selected_code: Optional[str] = Field(default=None, alias="code", description="Match code entered or selected by responder")
+
 
 class CallHistoryItem(BaseModel):
     """

@@ -237,3 +237,4 @@ def test_compute_final_outcome_helper():
     outcome = compute_final_outcome(state, VerificationStatus.NOT_REQUESTED)
     assert isinstance(outcome, FinalOutcome)
     assert outcome == FinalOutcome.LIKELY_IMPERSONATION
+

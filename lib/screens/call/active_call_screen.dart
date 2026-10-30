@@ -1,11 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/risk_band.dart';
+import '../../services/audio_frame_builder.dart';
+import '../../services/audio_player_service.dart';
+import '../../services/wav_parser.dart';
+import '../../services/window_planner.dart';
+import '../../services/window_sender.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
+import '../../utils/logger.dart';
 import '../../utils/time_format.dart';
 import '../../widgets/call/simulated_banner.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -28,16 +35,23 @@ class ActiveCallScreen extends StatefulWidget {
 }
 
 class _ActiveCallScreenState extends State<ActiveCallScreen> {
+  // Audio Pipeline Components
+  final AudioPlayerService _playerService = AudioPlayerService();
+  WindowSender? _windowSender;
+  WindowPlanner? _windowPlanner;
+  WavData? _wavData;
+  bool _isAudioReady = false;
+
   Timer? _callTimer;
   int _secondsElapsed = 0;
 
-  // Real-time analysis simulation state
-  double _riskScore = 18.0;
+  // Real-time analysis state
+  double _riskScore = 14.0;
   RiskBand _currentBand = RiskBand.low;
-  final List<int> _timelineScores = [14, 18];
-  int _windowsAnalysed = 2;
-  double _speechSeconds = 3.5;
-  final int _lastLatencyMs = 380;
+  final List<int> _timelineScores = [];
+  int _windowsAnalysed = 0;
+  double _speechSeconds = 0.0;
+  int _lastLatencyMs = 320;
   String _latestAlert =
       'Acoustic parameters nominal. Analysing speech windows.';
 
@@ -45,57 +59,137 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   void initState() {
     super.initState();
     _startCallTimer();
-    _simulateAcousticEvolution();
+    _initAudioPipeline();
+  }
+
+  Future<void> _initAudioPipeline() async {
+    try {
+      final scenarioId =
+          widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
+      final assetPath =
+          'assets/audio/calls/${scenarioId == 'clone_ceo' ? 'clone_ceo_01.wav' : 'genuine_01.wav'}';
+
+      AppLogger.d(
+        'Initializing audio pipeline with $assetPath',
+        'ActiveCallScreen',
+      );
+
+      // 1. Load audio asset bytes from rootBundle
+      final ByteData data = await rootBundle.load(assetPath);
+      final bytes = data.buffer.asUint8List();
+
+      // 2. Parse and validate 16 kHz mono PCM16 format
+      _wavData = WavParser.parse(bytes);
+      _windowPlanner = WindowPlanner(totalSamples: _wavData!.totalSamples);
+
+      AppLogger.d(
+        'Parsed WAV: ${_wavData!.totalSamples} samples, ${_windowPlanner!.count} windows planned',
+        'ActiveCallScreen',
+      );
+
+      // 3. Setup WindowSender synchronized with playback position
+      _windowSender = WindowSender(
+        positionStream: _playerService.positionStream,
+        playerStateStream: _playerService.playerStateStream,
+        pcm: _wavData!.samples,
+        planner: _windowPlanner!,
+        frameBuilder: const AudioFrameBuilder(),
+        onFrame: _onAudioWindowEmitted,
+      );
+
+      // 4. Load audio into player and start playback
+      await _playerService.loadAsset(assetPath);
+      _windowSender!.start();
+      await _playerService.play();
+
+      if (mounted) {
+        setState(() => _isAudioReady = true);
+      }
+    } catch (e, st) {
+      AppLogger.e(
+        'Failed to initialize audio pipeline',
+        e,
+        st,
+        'ActiveCallScreen',
+      );
+      if (mounted) {
+        setState(() {
+          _latestAlert =
+              'Demo audio clip unavailable. Using simulated speech stream.';
+        });
+      }
+    }
+  }
+
+  void _onAudioWindowEmitted(Uint8List frame, int seq, DateTime sentAt) {
+    if (!mounted) return;
+
+    final scenarioId =
+        widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
+    int windowScore;
+
+    // Deterministic progression mapped to scenario
+    if (scenarioId == 'clone_ceo') {
+      // Escalates to synthetic detection after initial windows
+      if (seq < 2) {
+        windowScore = 18 + seq * 4;
+      } else if (seq < 4) {
+        windowScore = 48 + seq * 5;
+      } else {
+        windowScore = 82 + (seq % 3) * 4;
+      }
+    } else {
+      // Genuine call remains low risk
+      windowScore = 10 + (seq % 3) * 3;
+    }
+
+    setState(() {
+      _windowsAnalysed = seq + 1;
+      _speechSeconds = (_windowsAnalysed * 1.75).clamp(0.0, 30.0);
+      _lastLatencyMs = 280 + (seq * 15) % 90;
+      _timelineScores.add(windowScore);
+      _riskScore = windowScore.toDouble();
+
+      if (windowScore >= 65) {
+        _currentBand = RiskBand.high;
+        _latestAlert = 'WARNING: High probability of synthetic voice cloning.';
+      } else if (windowScore >= 35) {
+        _currentBand = RiskBand.medium;
+        _latestAlert =
+            'Acoustic anomaly detected. Suspicious vocal pitch stability.';
+      } else {
+        _currentBand = RiskBand.low;
+        _latestAlert = 'Acoustic parameters nominal. Natural vocal prosody.';
+      }
+    });
+
+    AppLogger.d(
+      'Window $seq emitted (${frame.length} bytes), score: $windowScore, band: ${_currentBand.name}',
+      'ActiveCallScreen',
+    );
   }
 
   void _startCallTimer() {
     _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
-      setState(() {
-        _secondsElapsed++;
-        _speechSeconds = (_secondsElapsed * 0.85);
-      });
+      setState(() => _secondsElapsed++);
     });
-  }
-
-  void _simulateAcousticEvolution() {
-    final scenarioId =
-        widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
-    if (scenarioId == 'clone_ceo') {
-      // Simulate synthetic voice escalation after window 3
-      Future.delayed(const Duration(seconds: 4), () {
-        if (!mounted) return;
-        setState(() {
-          _riskScore = 52.0;
-          _currentBand = RiskBand.medium;
-          _timelineScores.add(52);
-          _windowsAnalysed++;
-          _latestAlert =
-              'Acoustic anomaly detected. Suspicious vocal pitch stability.';
-        });
-      });
-      Future.delayed(const Duration(seconds: 8), () {
-        if (!mounted) return;
-        setState(() {
-          _riskScore = 88.0;
-          _currentBand = RiskBand.high;
-          _timelineScores.addAll([76, 88]);
-          _windowsAnalysed += 2;
-          _latestAlert =
-              'WARNING: High probability of synthetic voice cloning.';
-        });
-      });
-    }
   }
 
   @override
   void dispose() {
     _callTimer?.cancel();
+    _windowSender?.dispose();
+    _playerService.stop();
+    _playerService.dispose();
     super.dispose();
   }
 
   void _handleEndCall() {
     _callTimer?.cancel();
+    _windowSender?.dispose();
+    _playerService.stop();
+
     context.pushReplacement(
       '/call/outcome',
       extra: {
@@ -161,9 +255,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const StatusChip(
-                        label: 'Analysis Stream Connected',
-                        tone: StatusTone.success,
+                      StatusChip(
+                        label: _isAudioReady
+                            ? 'Playback & Slicing Active'
+                            : 'Initializing Audio...',
+                        tone: _isAudioReady
+                            ? StatusTone.success
+                            : StatusTone.warning,
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -207,7 +305,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Active Call Simulation • Live AI Tap',
+                          'Active Call Simulation • 16 kHz Mono PCM16 Tap',
                           style: AppTextStyles.caption,
                         ),
                         const SizedBox(height: 16),
@@ -251,7 +349,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                           children: [
                             _buildStatTile(
                               label: 'Windows',
-                              value: '$_windowsAnalysed',
+                              value:
+                                  '$_windowsAnalysed / ${_windowPlanner?.count ?? 9}',
                               icon: Icons.layers_rounded,
                             ),
                             const SizedBox(width: 10),

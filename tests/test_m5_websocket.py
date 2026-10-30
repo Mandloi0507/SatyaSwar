@@ -30,7 +30,9 @@ def setup_mock_db_and_ml():
     """Reset mock firestore and mock ML configuration for each test."""
     mock_db = MockFirestoreClient()
     reset_mock_ml_config()
-    with patch("app.repositories.calls.get_firestore_client", return_value=mock_db):
+    with patch("app.services.firebase.get_firestore_client", return_value=mock_db), \
+         patch("app.repositories.calls.get_firestore_client", return_value=mock_db), \
+         patch("app.repositories.verification.get_firestore_client", return_value=mock_db):
         yield mock_db
 
 

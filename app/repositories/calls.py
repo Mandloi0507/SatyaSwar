@@ -14,6 +14,7 @@ from fastapi import HTTPException, status
 from firebase_admin import firestore
 
 from app.models.enums import (
+    ActionType,
     EvidenceQualityLevel,
     FinalOutcome,
     RiskLevel,
@@ -29,7 +30,12 @@ COL_SESSIONS = "call_sessions"
 COL_HISTORY = "call_history"
 
 
-def create_session(session_id: str, user_id: str) -> CallSession:
+def create_session(
+    session_id: str,
+    user_id: str,
+    action_type: ActionType = ActionType.OTHER,
+    claimed_name: Optional[str] = None,
+) -> CallSession:
     """
     Creates a new call session record in CREATED state.
     """
@@ -47,6 +53,9 @@ def create_session(session_id: str, user_id: str) -> CallSession:
         "risk_level": RiskLevel.UNAVAILABLE.value,
         "evidence_quality": EvidenceQualityLevel.POOR.value,
         "verification_status": VerificationStatus.NOT_REQUESTED.value,
+        "action_type": action_type.value if hasattr(action_type, "value") else str(action_type),
+        "verification_id": None,
+        "claimed_name": claimed_name,
         "window_count": 0,
         "created_at": now,
         "updated_at": now,
@@ -58,6 +67,9 @@ def create_session(session_id: str, user_id: str) -> CallSession:
         session_id=session_id,
         user_id=user_id,
         status=SessionStatus.CREATED,
+        action_type=action_type if isinstance(action_type, ActionType) else ActionType(action_type),
+        verification_id=None,
+        claimed_name=claimed_name,
         created_at=None,
         updated_at=None,
     )
@@ -96,6 +108,9 @@ def get_owned_session(session_id: str, user_id: str) -> CallSession:
         risk_level=RiskLevel(data.get("risk_level", RiskLevel.UNAVAILABLE)),
         evidence_quality=EvidenceQualityLevel(data.get("evidence_quality", EvidenceQualityLevel.POOR)),
         verification_status=VerificationStatus(data.get("verification_status", VerificationStatus.NOT_REQUESTED)),
+        action_type=ActionType(data.get("action_type", ActionType.OTHER)),
+        verification_id=data.get("verification_id"),
+        claimed_name=data.get("claimed_name"),
         window_count=data.get("window_count", 0),
         created_at=data.get("created_at"),
         updated_at=data.get("updated_at"),
@@ -175,10 +190,35 @@ def complete_session_and_persist_history(
     """
     Finalizes the live session and writes a compact, privacy-safe history item.
     Privacy Guarantee: Never stores audio bytes, frames, or speech transcripts.
-    Sets 'expires_at' for Firestore TTL retention policy.
+    Idempotent: Prevents duplicate call history records for the same session.
     """
     db = get_firestore_client()
     now = firestore.SERVER_TIMESTAMP
+
+    # Check for existing history record to prevent duplicate entries
+    existing_history = list(
+        db.collection(COL_HISTORY)
+        .where("session_id", "==", session_id)
+        .limit(1)
+        .stream()
+    )
+    if existing_history:
+        doc = existing_history[0]
+        d = doc.to_dict() or {}
+        logger.info("Call history already exists for session %s (doc_id=%s)", session_id, doc.id)
+        return CallHistoryItem(
+            id=doc.id,
+            user_id=user_id,
+            session_id=session_id,
+            claimed_contact=d.get("claimed_contact", claimed_contact),
+            risk_score=d.get("risk_score", risk_score),
+            risk_level=RiskLevel(d.get("risk_level", risk_level.value)),
+            evidence_quality=EvidenceQualityLevel(d.get("evidence_quality", evidence_quality.value)),
+            verification_status=VerificationStatus(d.get("verification_status", verification_status.value)),
+            final_outcome=FinalOutcome(d.get("final_outcome", final_outcome.value)),
+            created_at=d.get("created_at"),
+            expires_at=d.get("expires_at"),
+        )
 
     # Transition session to COMPLETED
     session_ref = db.collection(COL_SESSIONS).document(session_id)

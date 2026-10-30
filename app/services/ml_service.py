@@ -8,6 +8,7 @@ and never logs raw audio payloads.
 """
 
 import logging
+import math
 from typing import Any, Optional
 import httpx
 
@@ -28,15 +29,21 @@ class MLUnavailable(Exception):
 def validate_ml_output(data: dict[str, Any]) -> dict[str, Any]:
     """
     Validates output payload from ML inference service.
-    Ensures scores and quality metrics are within valid numerical ranges [0.0, 1.0].
+    Ensures scores and quality metrics are finite numbers within [0.0, 1.0].
+    Explicitly rejects NaN, Infinity, and -Infinity.
     """
     if not isinstance(data, dict):
         raise MLUnavailable("ML response is not a valid JSON object")
 
     for key in ("spoof_score", "evidence_quality"):
         val = data.get(key)
-        if val is None or not isinstance(val, (int, float)) or not (0.0 <= float(val) <= 1.0):
-            raise MLUnavailable(f"Invalid or out-of-range value for '{key}': {val}")
+        if val is None or not isinstance(val, (int, float)):
+            raise MLUnavailable(f"Invalid or missing value for '{key}': {val}")
+        fval = float(val)
+        if not math.isfinite(fval):
+            raise MLUnavailable(f"Non-finite value for '{key}': {val}")
+        if not (0.0 <= fval <= 1.0):
+            raise MLUnavailable(f"Out-of-range value for '{key}': {val}")
 
     return data
 
@@ -77,11 +84,14 @@ class MLClient:
             MLUnavailable: On network timeout, connection error, non-200 HTTP status,
                            or malformed/uncalibrated score response.
         """
+        settings = get_settings()
         headers = {
             "Content-Type": "application/octet-stream",
             "X-Session-Id": session_id,
             "X-Window-Id": str(window_id),
-            "X-Sample-Rate": "16000",
+            "X-Sample-Rate": str(settings.audio_sample_rate),
+            "X-Sample-Width": str(settings.audio_sample_width_bytes),
+            "X-Channels": str(settings.audio_channels),
         }
 
         try:

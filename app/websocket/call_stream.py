@@ -4,6 +4,8 @@ Member 2: Backend, Infrastructure, Database and Security
 
 Handles real-time bi-directional audio streaming, frame validation, backpressure
 management, ML inference dispatching, and live risk broadcasting for call sessions.
+Implements bounded queue draining on clean termination, single-execution finalization,
+and resilient failure handling.
 """
 
 import asyncio
@@ -20,6 +22,7 @@ from app.decision.risk_engine import (
     RiskState,
     classify_risk,
     compute_final_outcome,
+    evaluate_decision,
     update_risk_state,
 )
 from app.dependencies.auth import (
@@ -27,12 +30,14 @@ from app.dependencies.auth import (
     authenticate_websocket,
 )
 from app.models.enums import (
+    ActionType,
     EvidenceQualityLevel,
     RiskLevel,
     SessionStatus,
     VerificationStatus,
 )
 from app.repositories import calls as calls_repo
+from app.repositories import verification as verification_repo
 from app.services.ml_service import MLClient, MLUnavailable
 from app.websocket.audio_frame import (
     InvalidAudioFrameError,
@@ -54,6 +59,10 @@ WS_HEARTBEAT_TIMEOUT_CODE = 4408
 
 HEARTBEAT_TIMEOUT_SECONDS = 30.0
 MAX_QUEUE_SIZE = 4
+DRAIN_TIMEOUT_SECONDS = 10.0
+
+# Sentinel indicating end-of-audio stream for clean worker queue draining
+SENTINEL_STOP = object()
 
 
 async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
@@ -123,21 +132,31 @@ async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
     audio_queue: asyncio.Queue = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
     ml_client = MLClient()
     last_activity_time = time.time()
-    call_ended = asyncio.Event()
+
+    # Lifecycle coordination flags
+    stop_receiving = asyncio.Event()
+    finalized = False
+    worker_failed = False
 
     async def receiver_task():
         nonlocal last_seq, last_activity_time
         try:
-            while not call_ended.is_set():
+            while not stop_receiving.is_set():
                 message = await websocket.receive()
                 last_activity_time = time.time()
 
                 # Handle client close / disconnect
                 if message["type"] == "websocket.disconnect":
+                    logger.info("Client disconnected in session %s", session_id)
+                    stop_receiving.set()
+                    await audio_queue.put(SENTINEL_STOP)
                     break
 
                 # Handle binary audio frame
                 if "bytes" in message and message["bytes"]:
+                    if stop_receiving.is_set():
+                        continue
+
                     raw_bytes = message["bytes"]
                     try:
                         frame = parse_audio_frame(raw_bytes, last_seq=last_seq)
@@ -152,15 +171,18 @@ async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
                         })
                         continue
 
-                    # Bounded queue backpressure: drop oldest if queue is full
+                    # Bounded queue backpressure: drop oldest if queue is full (never drop SENTINEL_STOP)
                     if audio_queue.full():
                         try:
-                            _ = audio_queue.get_nowait()
-                            audio_queue.task_done()
-                            logger.warning(
-                                "Backpressure: dropped oldest audio window in session %s",
-                                session_id,
-                            )
+                            dropped = audio_queue.get_nowait()
+                            if dropped is SENTINEL_STOP:
+                                await audio_queue.put(SENTINEL_STOP)
+                            else:
+                                audio_queue.task_done()
+                                logger.warning(
+                                    "Backpressure: dropped oldest audio window in session %s",
+                                    session_id,
+                                )
                         except asyncio.QueueEmpty:
                             pass
 
@@ -168,7 +190,8 @@ async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
 
                     if frame.is_last:
                         logger.info("Received final audio window (is_last=True) for session %s", session_id)
-                        call_ended.set()
+                        stop_receiving.set()
+                        await audio_queue.put(SENTINEL_STOP)
                         break
 
                 # Handle text control messages
@@ -193,24 +216,36 @@ async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
                         })
                     elif msg_type == "end":
                         logger.info("Client requested end of call for session %s", session_id)
-                        call_ended.set()
+                        stop_receiving.set()
+                        await audio_queue.put(SENTINEL_STOP)
                         break
 
         except WebSocketDisconnect:
-            pass
+            stop_receiving.set()
+            try:
+                await audio_queue.put(SENTINEL_STOP)
+            except Exception:
+                pass
         except Exception as e:
             logger.error("Error in receiver task for session %s: %s", session_id, e)
+            stop_receiving.set()
+            try:
+                await audio_queue.put(SENTINEL_STOP)
+            except Exception:
+                pass
 
     async def ml_worker_task():
-        nonlocal risk_state
+        nonlocal risk_state, worker_failed
         consecutive_ml_failures = 0
         try:
-            while not call_ended.is_set() or not audio_queue.empty():
-                try:
-                    frame = await asyncio.wait_for(audio_queue.get(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    continue
+            while True:
+                item = await audio_queue.get()
+                if item is SENTINEL_STOP:
+                    audio_queue.task_done()
+                    logger.info("ML worker reached SENTINEL_STOP for session %s", session_id)
+                    break
 
+                frame = item
                 try:
                     t_start = time.perf_counter()
                     ml_result = await ml_client.score_window(
@@ -273,14 +308,16 @@ async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
                     audio_queue.task_done()
 
         except asyncio.CancelledError:
-            pass
+            logger.info("ML worker task cancelled for session %s", session_id)
+            raise
         except Exception as e:
-            logger.error("Error in ML worker task for session %s: %s", session_id, e)
+            logger.error("Fatal error in ML worker task for session %s: %s", session_id, e)
+            worker_failed = True
 
     async def heartbeat_task():
         try:
-            while not call_ended.is_set():
-                await asyncio.sleep(5.0)
+            while not stop_receiving.is_set():
+                await asyncio.sleep(2.0)
                 if time.time() - last_activity_time > HEARTBEAT_TIMEOUT_SECONDS:
                     logger.warning(
                         "Session %s exceeded heartbeat timeout (%.1fs)",
@@ -293,51 +330,107 @@ async def handle_call_stream(websocket: WebSocket, session_id: str) -> None:
                         "message": "Connection timed out due to inactivity",
                         "fatal": True,
                     })
-                    call_ended.set()
+                    stop_receiving.set()
+                    try:
+                        await audio_queue.put(SENTINEL_STOP)
+                    except Exception:
+                        pass
                     if websocket.client_state == WebSocketState.CONNECTED:
                         await websocket.close(code=WS_HEARTBEAT_TIMEOUT_CODE, reason="Heartbeat timeout")
                     break
         except asyncio.CancelledError:
             pass
 
-    # Run tasks concurrently
-    tasks = [
-        asyncio.create_task(receiver_task()),
-        asyncio.create_task(ml_worker_task()),
-        asyncio.create_task(heartbeat_task()),
-    ]
+    async def finalize_session():
+        nonlocal finalized
+        if finalized:
+            return
+        finalized = True
+
+        # Fetch authoritative verification and session state from server-side database
+        try:
+            current_session = calls_repo.get_owned_session(session_id, user.uid)
+        except Exception:
+            current_session = None
+
+        ver_req = verification_repo.get_latest_verification_for_session(session_id)
+
+        if ver_req is not None:
+            v_status = ver_req.status
+            act_type = ver_req.action_type
+        elif current_session is not None:
+            v_status = current_session.verification_status
+            act_type = getattr(current_session, "action_type", ActionType.OTHER)
+        else:
+            v_status = VerificationStatus.NOT_REQUESTED
+            act_type = ActionType.OTHER
+
+        # If worker failed fatally or ML failed consecutively, analysis is marked unavailable
+        ml_available = not worker_failed and (risk_state.ml_failures_in_row < 3)
+
+        decision = evaluate_decision(
+            state=risk_state,
+            verification_status=v_status,
+            action_type=act_type,
+            ml_available=ml_available,
+        )
+        final_outcome = decision.final_outcome
+
+        outcome_message = {
+            "type": "outcome",
+            "finalOutcome": final_outcome.value,
+            "headline": decision.headline,
+            "recommendation": decision.recommendation,
+            "shouldHoldAction": decision.should_hold_action,
+            "verificationStatus": v_status.value,
+            "actionType": act_type.value,
+            "peakRiskIndex": int(round((risk_state.peak_risk or 0.0) * 100)),
+        }
+        await manager.broadcast(session_id, outcome_message)
+
+    # Launch concurrent tasks
+    receiver_fut = asyncio.create_task(receiver_task())
+    worker_fut = asyncio.create_task(ml_worker_task())
+    heartbeat_fut = asyncio.create_task(heartbeat_task())
 
     try:
-        # Wait until client finishes or disconnects
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for t in pending:
-            t.cancel()
+        # Wait until receiving stops (normal completion, client disconnect, or heartbeat timeout)
+        done, pending = await asyncio.wait(
+            [receiver_fut, heartbeat_fut],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        # Cancel heartbeat watchdog immediately
+        if not heartbeat_fut.done():
+            heartbeat_fut.cancel()
             try:
-                await t
-            except (asyncio.CancelledError, Exception):
+                await heartbeat_fut
+            except asyncio.CancelledError:
                 pass
 
-        # Send final outcome before closing if call ended cleanly
-        if call_ended.is_set():
-            final_outcome = compute_final_outcome(
-                risk_state,
-                verification_status="NOT_REQUESTED",
-                ml_available=True,
-            )
-            outcome_message = {
-                "type": "outcome",
-                "finalOutcome": final_outcome.value,
-                "headline": (
-                    "Likely impersonation detected. Do not proceed."
-                    if final_outcome.value == "likely_impersonation"
-                    else "Voice analysis completed."
-                ),
-                "peakRiskIndex": int(round((risk_state.peak_risk or 0.0) * 100)),
-            }
-            await manager.broadcast(session_id, outcome_message)
+        # Drain the ML worker queue: allow all queued frames to be processed up to DRAIN_TIMEOUT_SECONDS
+        try:
+            if not stop_receiving.is_set():
+                stop_receiving.set()
+                await audio_queue.put(SENTINEL_STOP)
+
+            await asyncio.wait_for(worker_fut, timeout=DRAIN_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.warning("ML worker draining timed out after %.1fs for session %s", DRAIN_TIMEOUT_SECONDS, session_id)
+            worker_fut.cancel()
+            try:
+                await worker_fut
+            except (asyncio.CancelledError, Exception):
+                pass
+        except Exception as e:
+            logger.error("Error while awaiting ML worker completion in session %s: %s", session_id, e)
+
+        # Send final outcome before closing socket
+        await finalize_session()
 
     finally:
-        # Cleanup connections and clients
+        # Ensure finalization and cleanup are performed exactly once
+        await finalize_session()
         manager.remove(session_id, websocket)
         await ml_client.close()
 

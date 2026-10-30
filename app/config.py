@@ -172,3 +172,4 @@ def get_settings() -> Settings:
     Uses lru_cache to avoid reading the environment and .env file repeatedly.
     """
     return Settings()
+

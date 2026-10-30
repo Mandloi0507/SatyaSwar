@@ -126,6 +126,8 @@ async def create_verification(
     # Update session verification status
     db.collection("call_sessions").document(session_id).update({
         "verification_status": VerificationStatus.PENDING.value,
+        "verification_id": ver_req.id,
+        "action_type": payload.action_type.value if hasattr(payload.action_type, "value") else str(payload.action_type),
         "updated_at": firestore.SERVER_TIMESTAMP,
     })
 

@@ -57,6 +57,8 @@ async def predict(
     x_session_id: Optional[str] = Header(None, alias="X-Session-Id"),
     x_window_id: Optional[str] = Header(None, alias="X-Window-Id"),
     x_sample_rate: Optional[str] = Header("16000", alias="X-Sample-Rate"),
+    x_sample_width: Optional[str] = Header("2", alias="X-Sample-Width"),
+    x_channels: Optional[str] = Header("1", alias="X-Channels"),
 ):
     import asyncio
 

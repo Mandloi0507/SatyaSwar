@@ -358,3 +358,85 @@ def compute_final_outcome(
         ml_available=ml_available,
     )
     return eval_result.final_outcome
+
+def evaluate_session_decision(
+    session: Any,
+    verification_status: Optional[Union[VerificationStatus, str]] = None,
+    action_type: Optional[Union[ActionType, str]] = None,
+) -> DecisionEvaluation:
+    """
+    Evaluates final decision for a stored CallSession using central decision logic.
+    Reconstructs the risk accumulator state and maps stored session metrics to
+    identical outcomes as WebSocket streaming finalization.
+    """
+    v_status = (
+        verification_status
+        if verification_status is not None
+        else getattr(session, "verification_status", VerificationStatus.NOT_REQUESTED)
+    )
+    a_type = (
+        action_type
+        if action_type is not None
+        else getattr(session, "action_type", ActionType.OTHER)
+    )
+
+    session_risk_level = getattr(session, "risk_level", RiskLevel.UNAVAILABLE)
+    if isinstance(session_risk_level, str):
+        session_risk_level = RiskLevel(session_risk_level)
+
+    session_evidence = getattr(session, "evidence_quality", EvidenceQualityLevel.POOR)
+    if isinstance(session_evidence, str):
+        session_evidence = EvidenceQualityLevel(session_evidence)
+
+    window_count = getattr(session, "window_count", 0)
+    latest_score = getattr(session, "latest_risk_score", None)
+
+    # Map session status to RiskState and ml_available flag
+    if session_risk_level == RiskLevel.UNAVAILABLE or window_count == 0:
+        ml_available = False
+        state = RiskState(windows_total=0)
+    elif session_risk_level == RiskLevel.INCONCLUSIVE:
+        ml_available = True
+        state = RiskState(
+            rolling_score=latest_score,
+            windows_total=max(window_count, 1),
+            latest_evidence=0.20,  # Below min_evidence_quality (POOR)
+            latest_spoof=latest_score,
+            peak_risk=latest_score,
+        )
+    else:
+        ml_available = True
+        if session_evidence == EvidenceQualityLevel.GOOD:
+            ev_val = 0.85
+        elif session_evidence == EvidenceQualityLevel.LIMITED:
+            ev_val = 0.60
+        else:
+            ev_val = 0.20
+
+        # Calibrated default score if not explicitly set
+        if latest_score is None:
+            if session_risk_level == RiskLevel.LOW:
+                latest_score = 0.15
+            elif session_risk_level == RiskLevel.MEDIUM:
+                latest_score = 0.50
+            elif session_risk_level == RiskLevel.HIGH:
+                latest_score = 0.88
+            else:
+                latest_score = 0.50
+
+        state = RiskState(
+            rolling_score=latest_score,
+            windows_total=max(window_count, 1),
+            windows_good=max(window_count, 1),
+            latest_evidence=ev_val,
+            latest_spoof=latest_score,
+            peak_risk=latest_score,
+        )
+
+    return evaluate_decision(
+        state=state,
+        verification_status=v_status,
+        action_type=a_type,
+        ml_available=ml_available,
+    )
+

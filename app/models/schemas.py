@@ -125,6 +125,7 @@ class CallCreateRequest(BaseModel):
     claimed_name: Optional[str] = Field(default=None, description="Name claimed by the caller")
     caller_number: Optional[str] = Field(default="Unknown", description="Caller phone number or identifier")
     direction: Optional[str] = Field(default="incoming", description="Call direction (incoming | outgoing)")
+    action_type: Optional[ActionType] = Field(default=ActionType.OTHER, description="Contextual action type")
 
 
 class CallCreateResponse(BaseModel):
@@ -151,6 +152,9 @@ class CallSession(BaseModel):
     risk_level: RiskLevel = Field(default=RiskLevel.UNAVAILABLE, description="Current categorical risk band")
     evidence_quality: EvidenceQualityLevel = Field(default=EvidenceQualityLevel.POOR, description="Latest window evidence quality")
     verification_status: VerificationStatus = Field(default=VerificationStatus.NOT_REQUESTED, description="Current contact verification status")
+    action_type: ActionType = Field(default=ActionType.OTHER, description="Contextual action type")
+    verification_id: Optional[str] = Field(default=None, description="Active verification request ID")
+    claimed_name: Optional[str] = Field(default=None, description="Caller claimed identity")
     window_count: int = Field(default=0, ge=0, description="Number of audio analysis windows processed")
     created_at: Optional[Any] = Field(default=None, description="Server timestamp of creation")
     updated_at: Optional[Any] = Field(default=None, description="Server timestamp of last update")

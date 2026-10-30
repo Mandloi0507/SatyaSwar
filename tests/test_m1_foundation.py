@@ -22,7 +22,7 @@ def client():
 
 def test_configuration_defaults():
     """Verify that configuration loads with sensible development defaults."""
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert settings.app_env == "development"
     assert settings.cors_origins == ["http://localhost:3000"]
     assert isinstance(settings.cors_origins, list)
@@ -36,7 +36,7 @@ def test_configuration_defaults():
 def test_cors_origins_json_array_env():
     """Verify that JSON-array format from environment is parsed into a list."""
     with patch.dict(os.environ, {"CORS_ORIGINS": '["http://localhost:3000"]'}):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert isinstance(settings.cors_origins, list)
         assert settings.cors_origins == ["http://localhost:3000"]
 
@@ -44,7 +44,7 @@ def test_cors_origins_json_array_env():
 def test_cors_origins_comma_separated_env():
     """Verify that comma-separated format from environment is parsed into a list."""
     with patch.dict(os.environ, {"CORS_ORIGINS": "http://localhost:3000,http://127.0.0.1:3000"}):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert isinstance(settings.cors_origins, list)
         assert settings.cors_origins == ["http://localhost:3000", "http://127.0.0.1:3000"]
 
@@ -52,7 +52,7 @@ def test_cors_origins_comma_separated_env():
 def test_cors_origins_unset_env():
     """Verify that default cors_origins applies when environment variable is unset."""
     with patch.dict(os.environ, {}, clear=True):
-        settings = Settings()
+        settings = Settings(_env_file=None)
         assert isinstance(settings.cors_origins, list)
         assert settings.cors_origins == ["http://localhost:3000"]
 
@@ -117,7 +117,7 @@ def test_cors_headers(client):
 
 def test_no_firebase_initialization_in_m1():
     """Verify that M1 configuration and core endpoints run without requiring Firebase credentials."""
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert settings.firebase_project_id == ""
     assert settings.google_application_credentials == ""
 

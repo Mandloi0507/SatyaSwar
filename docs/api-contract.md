@@ -354,23 +354,122 @@ Backend automatically supports both formats without client configuration:
 
 ## 8. ML Service Interface Contract (Member 3)
 
-The backend interacts with the audio analysis ML service via async HTTP:
-- **Target URL:** `settings.ml_service_url` (`POST /predict`)
-- **Request Body:** Raw PCM audio bytes (`Content-Type: application/octet-stream`)
-- **Request Headers:**
-  - `X-Session-Id`: Unique call session ID
-  - `X-Window-Id`: Sequence index of the window
-  - `X-Sample-Rate`: `16000`
-- **Response `200 OK` JSON:**
-  ```json
-  {
-    "session_id": "call_123",
-    "window_id": 0,
-    "spoof_score": 0.88,
-    "evidence_quality": 0.92,
-    "speech_duration": 3.5,
-    "processing_time_ms": 110
-  }
-  ```
-- **Error Behavior:** Timeouts or non-200 responses trigger fallback `analysis_unavailable` events to the client. Failures are NEVER treated as safe.
+### 8.1 Overview
+
+The backend communicates with Member 3's ML audio analysis inference service via async HTTP.
+The ML service endpoint is configurable via the environment variable `ML_SERVICE_URL` (default: `http://localhost:9000`).
+Request timeout is configurable via `ML_TIMEOUT_SECONDS` (default: `3.0` seconds).
+
+### 8.2 Request Specification
+
+```
+POST /predict
+Content-Type: application/octet-stream
+```
+
+**Request Body:** Raw PCM audio bytes for a single analysis window.  
+The body contains exactly `sample_rate × window_seconds × sample_width_bytes × channels` bytes of raw audio (e.g., 16000 × 3.5 × 2 × 1 = 112,000 bytes at default settings).
+
+**Request Headers:**
+
+| Header | Type | Example | Description |
+|---|---|---|---|
+| `Content-Type` | string | `application/octet-stream` | Always `application/octet-stream` |
+| `X-Session-Id` | string | `call_a1b2c3d4e5f6` | Unique call session identifier |
+| `X-Window-Id` | string | `0` | Zero-based sequence index of the audio window |
+| `X-Sample-Rate` | string | `16000` | Audio sample rate in Hz |
+| `X-Sample-Width` | string | `2` | Bytes per sample (2 = PCM signed 16-bit little-endian) |
+| `X-Channels` | string | `1` | Channel count (1 = mono) |
+
+### 8.3 Audio Format Assumptions (PROVISIONAL)
+
+The backend assumes the following fixed PCM format, configurable via environment variables:
+
+| Parameter | Default | Env Variable | Description |
+|---|---|---|---|
+| Sample Rate | 16000 Hz | `AUDIO_SAMPLE_RATE` | Sampling frequency |
+| Sample Width | 2 bytes | `AUDIO_SAMPLE_WIDTH_BYTES` | Bytes per sample (PCM signed 16-bit LE) |
+| Channels | 1 (mono) | `AUDIO_CHANNELS` | Number of audio channels |
+| Window Duration | 3.5 s | `AUDIO_WINDOW_SECONDS` | Duration of each analysis window |
+| Hop Interval | 1.75 s | `AUDIO_HOP_SECONDS` | Overlap between consecutive windows (50%) |
+| Byte Order | Little-endian | — | Fixed: PCM signed 16-bit little-endian |
+
+**Expected PCM payload size per window:** `16000 × 3.5 × 2 × 1 = 112,000 bytes`
+
+### 8.4 Response Specification
+
+**Response `200 OK` — JSON:**
+
+```json
+{
+  "spoof_score": 0.88,
+  "evidence_quality": 0.92
+}
+```
+
+**Required fields (validated by backend):**
+
+| Field | Type | Range | Description |
+|---|---|---|---|
+| `spoof_score` | float | [0.0, 1.0] | Probability that the audio is synthetically generated or replayed. Higher = more likely spoofed. |
+| `evidence_quality` | float | [0.0, 1.0] | Confidence/quality of the analysis. Higher = more reliable evidence. Below `min_evidence_quality` (default 0.5), the score is ignored. |
+
+**Optional fields (passthrough, not validated):**
+
+| Field | Type | Description |
+|---|---|---|
+| `session_id` | string | Echo of request session ID |
+| `window_id` | int | Echo of request window ID |
+| `speech_duration` | float | Detected speech duration in seconds |
+| `processing_time_ms` | int | Server-side inference time in milliseconds |
+
+**Validation rules applied by the backend:**
+1. Response must be valid JSON (`Content-Type: application/json`).
+2. `spoof_score` and `evidence_quality` must be present, numeric, and finite.
+3. `NaN`, `Infinity`, and `-Infinity` are explicitly **rejected**.
+4. Values must satisfy `0.0 ≤ value ≤ 1.0`.
+5. Any validation failure produces an `MLUnavailable` error and the window is treated as an analysis failure (never as safe).
+
+### 8.5 Error Handling
+
+The backend handles ML service failures defensively:
+
+| Scenario | Backend Behavior |
+|---|---|
+| HTTP timeout (`ML_TIMEOUT_SECONDS` exceeded) | `MLUnavailable` raised. Window treated as analysis failure. |
+| Non-200 HTTP status (e.g., 500, 503, 403) | `MLUnavailable` raised with HTTP status code. |
+| Connection refused / network error | `MLUnavailable` raised. |
+| Malformed or non-JSON response | `MLUnavailable` raised. |
+| Invalid, out-of-range, NaN, or Infinity scores | `MLUnavailable` raised. |
+| 3 consecutive failures in a session | `analysis_unavailable` event broadcast to client via WebSocket. |
+
+**Critical safety guarantee:** ML failures are **NEVER** treated as genuine/safe. An unavailable analysis produces `FinalOutcome.ANALYSIS_UNAVAILABLE` or `FinalOutcome.INSUFFICIENT_EVIDENCE`, never `LIKELY_GENUINE`.
+
+### 8.6 Privacy & Security
+
+1. **Zero audio logging:** Raw PCM bytes are never written to logs at any log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`).
+2. **Zero audio persistence:** Raw audio is held in memory only for the duration of the HTTP request to the ML service, then discarded.
+3. **No disk storage:** Audio bytes are never written to Firestore, cloud storage, local filesystem, or any persistent medium.
+4. **Transport only:** Audio is transmitted over HTTP to the ML service endpoint. TLS (`https://`) is strongly recommended for production.
+
+### 8.7 Information Required from Member 3
+
+> **ACTION REQUIRED:** The following details must be confirmed by Member 3 before real ML integration can proceed.
+
+| # | Item | Current Assumption | Status |
+|---|---|---|---|
+| 1 | **ML Service Base URL** | `http://localhost:9000` (dev default) | ⚠️ Needs production URL |
+| 2 | **Authentication** | None (no auth headers sent beyond `X-*` metadata) | ⚠️ Confirm if API key, bearer token, or mTLS is required |
+| 3 | **Endpoint Path** | `POST /predict` | ⚠️ Confirm exact path |
+| 4 | **Input Format** | Raw PCM bytes (`application/octet-stream`) | ⚠️ Confirm acceptance of raw PCM or if a different encoding (WAV, FLAC, base64) is needed |
+| 5 | **Sample Rate** | 16000 Hz, mono, PCM signed 16-bit LE | ⚠️ Confirm supported sample rates and formats |
+| 6 | **Output Schema** | `{"spoof_score": float, "evidence_quality": float}` both in [0.0, 1.0] | ⚠️ Confirm exact response schema and field names |
+| 7 | **Additional Output Fields** | `speech_duration`, `processing_time_ms` (optional) | ⚠️ Confirm if additional fields are returned |
+| 8 | **Score Semantics** | `spoof_score` ∈ [0,1] where 1.0 = definitely spoofed | ⚠️ Confirm score polarity and calibration |
+| 9 | **Error Response Format** | Generic HTTP error codes | ⚠️ Confirm error response body format |
+| 10 | **Rate Limits** | None assumed | ⚠️ Confirm if rate limits or concurrency limits exist |
+| 11 | **Model Versioning** | Not tracked | ⚠️ Confirm if model version is returned in response headers or body |
+| 12 | **Health Check Endpoint** | `GET /health` assumed | ⚠️ Confirm health/readiness probe endpoint |
+
+**Note:** Until Member 3 provides their actual service, all integration tests use `httpx.MockTransport` or the in-process `tests/mock_ml_server.py` stub. The backend adapter (`app/services/ml_service.py`) is ready to connect to the real service with zero code changes once the above items are confirmed.
 

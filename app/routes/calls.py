@@ -16,12 +16,14 @@ from fastapi import APIRouter, Depends, Query, status
 from app.config import get_settings
 from app.dependencies.auth import AuthUser, get_current_user
 from app.models.enums import (
+    ActionType,
     EvidenceQualityLevel,
     FinalOutcome,
     RiskLevel,
     SessionStatus,
     VerificationStatus,
 )
+from app.decision.risk_engine import evaluate_session_decision
 from app.models.schemas import (
     CallCreateRequest,
     CallCreateResponse,
@@ -29,6 +31,7 @@ from app.models.schemas import (
     CallSession,
 )
 from app.repositories import calls as calls_repo
+from app.repositories import verification as verification_repo
 
 router = APIRouter(prefix="/api/v1/calls", tags=["Calls"])
 
@@ -44,7 +47,14 @@ async def create_call_session(
     Generates a unique session ID and returns the corresponding WebSocket connection details.
     """
     session_id = f"call_{secrets.token_hex(6)}"
-    session = calls_repo.create_session(session_id=session_id, user_id=current_user.uid)
+    act_type = request.action_type if request and request.action_type else ActionType.OTHER
+    claimed = request.claimed_name if request else None
+    session = calls_repo.create_session(
+        session_id=session_id,
+        user_id=current_user.uid,
+        action_type=act_type,
+        claimed_name=claimed,
+    )
     settings = get_settings()
 
     return CallCreateResponse(
@@ -102,27 +112,36 @@ async def end_call_session(
     if session.status in (SessionStatus.COMPLETED, SessionStatus.FAILED, SessionStatus.CANCELLED):
         return session
 
-    # Transition to COMPLETED
-    updated = calls_repo.transition_session_status(
-        session_id=session_id,
-        user_id=current_user.uid,
-        new_status=SessionStatus.COMPLETED,
-        allowed_from={SessionStatus.CREATED, SessionStatus.ACTIVE, SessionStatus.PROCESSING},
-    )
+    # Retrieve authoritative verification request and action type
+    ver_req = verification_repo.get_latest_verification_for_session(session_id)
+    if ver_req is not None:
+        v_status = ver_req.status
+        act_type = ver_req.action_type
+    else:
+        v_status = session.verification_status
+        act_type = session.action_type or ActionType.OTHER
 
-    # Automatically write call history record if not already recorded
+    # Evaluate decision using central decision engine (same as WebSocket flow)
+    decision = evaluate_session_decision(
+        session=session,
+        verification_status=v_status,
+        action_type=act_type,
+    )
+    final_outcome = decision.final_outcome
+
+    # Finalize session and persist history idempotently (protected against duplicates)
     calls_repo.complete_session_and_persist_history(
         session_id=session_id,
         user_id=current_user.uid,
-        claimed_contact=session.session_id,
+        claimed_contact=session.claimed_name or session.session_id,
         risk_score=session.latest_risk_score,
-        risk_level=session.risk_level,
-        evidence_quality=session.evidence_quality,
-        verification_status=session.verification_status,
-        final_outcome=FinalOutcome.LIKELY_GENUINE if session.risk_level == RiskLevel.LOW else FinalOutcome.SUSPICIOUS,
+        risk_level=decision.risk_level,
+        evidence_quality=decision.evidence_quality,
+        verification_status=v_status,
+        final_outcome=final_outcome,
     )
 
-    return updated
+    return calls_repo.get_owned_session(session_id=session_id, user_id=current_user.uid)
 
 
 @router.get("/{session_id}/result")

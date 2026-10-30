@@ -279,3 +279,71 @@ def cancel_verification_request(request_id: str, requester_uid: str) -> Verifica
 
     return get_verification_request(request_id, requester_uid)
 
+def get_latest_verification_for_session(session_id: str) -> Optional[VerificationRequest]:
+    """
+    Retrieves the authoritative verification request associated with a call session.
+    Checks and enforces expiration if the request is still PENDING.
+    Returns None if no verification was ever requested for this session.
+    """
+    db = get_firestore_client()
+    docs = list(
+        db.collection(COLLECTION)
+        .where("session_id", "==", session_id)
+        .order_by("created_at", direction=firestore.Query.DESCENDING)
+        .limit(1)
+        .stream()
+    )
+    if not docs:
+        docs = list(
+            db.collection(COLLECTION)
+            .where("session_id", "==", session_id)
+            .limit(1)
+            .stream()
+        )
+    if not docs:
+        return None
+
+    doc = docs[0]
+    d = doc.to_dict() or {}
+    current_status = VerificationStatus(d.get("status", VerificationStatus.PENDING))
+    expires_at = d.get("expires_at")
+
+    if current_status == VerificationStatus.PENDING and expires_at:
+        now_dt = datetime.now(timezone.utc)
+        if hasattr(expires_at, "astimezone"):
+            exp_dt = expires_at.astimezone(timezone.utc)
+        elif isinstance(expires_at, datetime):
+            exp_dt = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+        else:
+            exp_dt = None
+
+        if exp_dt and exp_dt < now_dt:
+            if hasattr(doc, "reference") and doc.reference:
+                doc.reference.update({
+                    "status": VerificationStatus.EXPIRED.value,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                })
+            else:
+                db.collection(COLLECTION).document(doc.id).update({
+                    "status": VerificationStatus.EXPIRED.value,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                })
+            current_status = VerificationStatus.EXPIRED
+
+    return VerificationRequest(
+        id=doc.id,
+        session_id=d.get("session_id", ""),
+        requester_id=d.get("requester_id", ""),
+        contact_user_id=d.get("contact_user_id", ""),
+        claimed_identity=d.get("claimed_identity", ""),
+        action_type=ActionType(d.get("action_type", ActionType.OTHER)),
+        amount=d.get("amount"),
+        status=current_status,
+        code_hash=d.get("code_hash"),
+        attempts=d.get("attempts", 0),
+        max_attempts=d.get("max_attempts", 3),
+        created_at=d.get("created_at"),
+        expires_at=expires_at,
+        responded_at=d.get("responded_at"),
+    )
+

@@ -27,6 +27,7 @@ class AlertService {
       await _tts.setLanguage('en-IN');
       await _tts.setPitch(1.0);
       await _tts.setSpeechRate(0.5);
+      await _tts.awaitSpeakCompletion(true);
     } catch (e) {
       AppLogger.w('TTS initialization error: $e', 'AlertService');
     }
@@ -86,15 +87,32 @@ class AlertService {
         await audioPlayerService!.duckVolume(0.2);
       }
 
-      // 2. Speak alert using TTS
+      // 2. Speak alert using TTS with proper completion callbacks
+      final completer = Completer<void>();
+      _tts.setCompletionHandler(() {
+        if (!completer.isCompleted) completer.complete();
+      });
+      _tts.setErrorHandler((dynamic msg) {
+        AppLogger.w('TTS speech error: $msg', 'AlertService');
+        if (!completer.isCompleted) completer.complete();
+      });
+      _tts.setCancelHandler(() {
+        if (!completer.isCompleted) completer.complete();
+      });
+
       await _tts.speak(message);
 
-      // Wait for speech completion (estimated ~3.5 seconds)
-      await Future<void>.delayed(const Duration(milliseconds: 3200));
+      // Await real completion callback or safety timeout to ensure volume is always restored
+      await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          AppLogger.d('TTS completion callback timed out, proceeding', 'AlertService');
+        },
+      );
     } catch (e) {
       AppLogger.w('Spoken alert failed: $e', 'AlertService');
     } finally {
-      // 3. Restore call audio volume
+      // 3. Always restore original caller volume after the warning
       if (audioPlayerService != null) {
         await audioPlayerService!.restoreVolume();
       }

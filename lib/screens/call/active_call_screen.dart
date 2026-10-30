@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/call_history_record.dart';
@@ -53,6 +54,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   Duration _playbackPosition = Duration.zero;
   Duration? _audioTotalDuration;
   StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<PlayerState>? _playerStateSub;
 
   Timer? _callTimer;
   int _secondsElapsed = 0;
@@ -60,7 +62,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   @override
   void initState() {
     super.initState();
-    _startCallTimer();
+    // Call timer begins ONLY when playback actually begins, not at initial widget mount
     _initAudioPipeline();
   }
 
@@ -118,25 +120,79 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       // Track playback position for live display
       _positionSub?.cancel();
       _positionSub = _playerService.positionStream.listen((pos) {
-        if (mounted) {
-          setState(() => _playbackPosition = pos);
+        if (!mounted) return;
+        setState(() => _playbackPosition = pos);
+        // Secondary safeguard: if position advances and timer hasn't started yet, start it
+        if (pos > Duration.zero && (_callTimer == null || !_callTimer!.isActive)) {
+          _startCallTimer();
         }
       });
 
-      // 5. Load audio into player and start playback
+      // Observe playerStateStream: Do NOT mark audio as ready merely because asset loaded
+      _playerStateSub?.cancel();
+      _playerStateSub = _playerService.playerStateStream.listen((state) {
+        if (!mounted) return;
+        AppLogger.d(
+          'PlayerState: processingState=${state.processingState}, playing=${state.playing}',
+          'ActiveCallScreen',
+        );
+
+        // Mark ready only when player actually reaches ready state
+        if (state.processingState == ProcessingState.ready ||
+            (state.playing && state.processingState != ProcessingState.idle)) {
+          if (!_isAudioReady) {
+            setState(() {
+              _isAudioReady = true;
+              _audioErrorMessage = null;
+            });
+          }
+        }
+
+        // Start call timer ONLY when playback actually begins
+        if (state.playing &&
+            (state.processingState == ProcessingState.ready ||
+                state.processingState == ProcessingState.buffering)) {
+          if (_callTimer == null || !_callTimer!.isActive) {
+            _startCallTimer();
+          }
+        }
+
+        // Stop timer when playback completes
+        if (state.processingState == ProcessingState.completed) {
+          _stopCallTimer();
+          AppLogger.d('Audio playback completed: call timer stopped', 'ActiveCallScreen');
+        }
+      }, onError: (Object err) {
+        if (!mounted) return;
+        _stopCallTimer();
+        setState(() {
+          _isAudioReady = false;
+          _audioErrorMessage = 'Audio playback stream error: $err';
+        });
+      });
+
+      // 5. Load audio into player
       final dur = await _playerService.loadAsset(assetPath);
       _windowSender!.start();
 
       if (mounted) {
         setState(() {
-          _isAudioReady = true;
           _audioTotalDuration = dur;
           _audioErrorMessage = null;
         });
       }
 
       // Start playback non-blocking so call UI runs concurrently with playback
-      unawaited(_playerService.play());
+      unawaited(_playerService.play().catchError((Object e, StackTrace st) {
+        AppLogger.e('Playback execution error', e, st, 'ActiveCallScreen');
+        if (mounted) {
+          _stopCallTimer();
+          setState(() {
+            _isAudioReady = false;
+            _audioErrorMessage = 'Playback execution error: $e';
+          });
+        }
+      }));
     } catch (e, st) {
       AppLogger.e(
         'Failed to initialize audio pipeline',
@@ -145,6 +201,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         'ActiveCallScreen',
       );
       if (mounted) {
+        _stopCallTimer();
         setState(() {
           _isAudioReady = false;
           _audioErrorMessage = 'Audio engine error: $e';
@@ -159,15 +216,39 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   }
 
   void _startCallTimer() {
+    _callTimer?.cancel();
     _callTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       setState(() => _secondsElapsed++);
     });
   }
 
+  void _stopCallTimer() {
+    _callTimer?.cancel();
+    _callTimer = null;
+  }
+
+  Future<void> _retryAudio() async {
+    _stopCallTimer();
+    await _playerStateSub?.cancel();
+    await _positionSub?.cancel();
+    await _windowSender?.dispose();
+    await _playerService.stop();
+    if (mounted) {
+      setState(() {
+        _secondsElapsed = 0;
+        _playbackPosition = Duration.zero;
+        _isAudioReady = false;
+        _audioErrorMessage = null;
+      });
+    }
+    await _initAudioPipeline();
+  }
+
   @override
   void dispose() {
-    _callTimer?.cancel();
+    _stopCallTimer();
+    _playerStateSub?.cancel();
     _positionSub?.cancel();
     _windowSender?.dispose();
     _playerService.stop();
@@ -177,7 +258,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   }
 
   void _handleEndCall() {
-    _callTimer?.cancel();
+    _stopCallTimer();
+    _playerStateSub?.cancel();
     _positionSub?.cancel();
     _windowSender?.dispose();
     _playerService.stop();
@@ -304,9 +386,9 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: _initAudioPipeline,
+                    onPressed: _retryAudio,
                     child: const Text(
-                      'Retry',
+                      'Retry Audio',
                       style: TextStyle(
                         color: AppColors.danger,
                         fontWeight: FontWeight.w700,

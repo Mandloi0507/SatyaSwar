@@ -113,6 +113,86 @@ void main() {
       expect(posController.stream, isA<Stream<Duration>>());
       expect(stateController.stream, isA<Stream<PlayerState>>());
     });
+
+    test('sender sets isCompleted and never emits after ProcessingState.completed', () async {
+      sender.start();
+      expect(sender.isCompleted, isFalse);
+
+      // Advance position to window 0 (3.5s)
+      posController.add(const Duration(milliseconds: 3500));
+      await Future.delayed(Duration.zero);
+      expect(emittedSeqs, equals([0]));
+
+      // Signal completion: flushes all remaining windows (1..8)
+      stateController.add(PlayerState(false, ProcessingState.completed));
+      await Future.delayed(Duration.zero);
+      expect(sender.isCompleted, isTrue);
+      expect(emittedSeqs.length, equals(9));
+
+      // Attempt to push further position ticks or states post-completion
+      posController.add(const Duration(milliseconds: 20000));
+      stateController.add(PlayerState(false, ProcessingState.completed));
+      await Future.delayed(Duration.zero);
+
+      // Must NOT emit any additional frames
+      expect(emittedSeqs.length, equals(9));
+      expect(sender.emittedCount, equals(9));
+    });
+
+    test('sender sets isDisposed and never emits after dispose()', () async {
+      sender.start();
+      expect(sender.isDisposed, isFalse);
+
+      posController.add(const Duration(milliseconds: 3500));
+      await Future.delayed(Duration.zero);
+      expect(emittedSeqs, equals([0]));
+
+      await sender.dispose();
+      expect(sender.isDisposed, isTrue);
+
+      // Post-disposal ticks and completion events must be completely ignored
+      posController.add(const Duration(milliseconds: 10000));
+      stateController.add(PlayerState(false, ProcessingState.completed));
+      await Future.delayed(Duration.zero);
+
+      expect(emittedSeqs, equals([0]));
+    });
+
+    test('playback state transitions: buffering -> ready -> playing -> completed', () async {
+      final states = <ProcessingState>[];
+      final playingFlags = <bool>[];
+
+      final sub = stateController.stream.listen((s) {
+        states.add(s.processingState);
+        playingFlags.add(s.playing);
+      });
+
+      // 1. Initial buffering
+      stateController.add(PlayerState(false, ProcessingState.buffering));
+      await Future.delayed(Duration.zero);
+
+      // 2. Ready (loaded)
+      stateController.add(PlayerState(false, ProcessingState.ready));
+      await Future.delayed(Duration.zero);
+
+      // 3. Actively playing
+      stateController.add(PlayerState(true, ProcessingState.ready));
+      await Future.delayed(Duration.zero);
+
+      // 4. Completed
+      stateController.add(PlayerState(false, ProcessingState.completed));
+      await Future.delayed(Duration.zero);
+
+      expect(states, equals([
+        ProcessingState.buffering,
+        ProcessingState.ready,
+        ProcessingState.ready,
+        ProcessingState.completed,
+      ]));
+      expect(playingFlags, equals([false, false, true, false]));
+
+      await sub.cancel();
+    });
   });
 
   group('Client Non-Generation of Authenticity Verdicts', () {

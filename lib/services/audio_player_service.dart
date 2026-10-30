@@ -40,6 +40,21 @@ class AudioPlayerService {
       ));
       await session.setActive(true);
       _sessionConfigured = true;
+
+      // Handle audio session interruptions so transient audio/TTS doesn't break caller playback
+      session.interruptionEventStream.listen((event) {
+        AppLogger.d(
+          'AudioSession interruption: begin=${event.begin}, type=${event.type}',
+          'AudioPlayerService',
+        );
+        if (!event.begin) {
+          // When transient interruption ends, restore playback if player was active
+          if (_player.playing) {
+            _player.play();
+          }
+        }
+      });
+
       AppLogger.d(
         'AudioSession initialized with speech/media loudspeaker attributes',
         'AudioPlayerService',

@@ -18,6 +18,8 @@ class WindowSender {
   final AudioFrameBuilder frameBuilder;
 
   int _next = 0;
+  bool _disposed = false;
+  bool _completed = false;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<PlayerState>? _stateSub;
 
@@ -36,19 +38,32 @@ class WindowSender {
   /// Total windows emitted so far
   int get emittedCount => _next;
 
+  /// Whether playback has finished and windows have completed emission
+  bool get isCompleted => _completed;
+
+  /// Whether the sender has been disposed
+  bool get isDisposed => _disposed;
+
   /// Starts listening to playback position and emitting frames as window deadlines are reached
   void start() {
+    if (_disposed) return;
+
     _posSub = positionStream.listen((pos) {
-      while (_next < planner.count &&
+      if (_disposed || _completed) return;
+      while (!_disposed &&
+          !_completed &&
+          _next < planner.count &&
           pos.inMilliseconds >= planner.endMsOf(_next)) {
         _emit(_next++);
       }
     });
 
     _stateSub = playerStateStream.listen((s) {
+      if (_disposed || _completed) return;
       if (s.processingState == ProcessingState.completed) {
+        _completed = true;
         // Flush any remaining windows at end of playback
-        while (_next < planner.count) {
+        while (!_disposed && _next < planner.count) {
           _emit(_next++);
         }
       }
@@ -56,6 +71,7 @@ class WindowSender {
   }
 
   void _emit(int i) {
+    if (_disposed) return;
     final now = DateTime.now();
     final slice = planner.sliceOf(pcm, i);
     final frame = frameBuilder.buildFrame(
@@ -68,9 +84,12 @@ class WindowSender {
     onFrame(frame, i, now);
   }
 
-  /// Cancels stream subscriptions
+  /// Cancels stream subscriptions and prevents any subsequent frame emissions
   Future<void> dispose() async {
+    _disposed = true;
     await _posSub?.cancel();
     await _stateSub?.cancel();
+    _posSub = null;
+    _stateSub = null;
   }
 }

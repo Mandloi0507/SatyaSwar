@@ -109,6 +109,10 @@ class Scenario {
       expectedBand: 'Medium / Adaptive Quality',
       isDanger: false,
     ),
+    /// Scenario 4: Short/Degraded speech testing system refusal to guess.
+    /// NOTE: 'short_insufficient_01.wav' intentionally contains silent/zero-energy PCM samples
+    /// to simulate lack of usable caller speech and verify that the system correctly assigns
+    /// low evidence quality without synthesizing a false authenticity verdict.
     Scenario(
       id: 'short_insufficient',
       title: 'Short or Degraded Speech Sample',
@@ -117,7 +121,7 @@ class Scenario {
       audioAsset: 'assets/audio/calls/short_insufficient_01.wav',
       durationMs: 17500,
       description:
-          'Call with sparse speech testing system refusal to guess under inadequate acoustic evidence.',
+          'Call with sparse speech testing system refusal to guess under inadequate acoustic evidence. Audio asset contains intentional silence to validate low evidence quality detection.',
       expectedBand: 'Insufficient Evidence',
       isDanger: false,
     ),

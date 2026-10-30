@@ -22,7 +22,7 @@
 | **Phase 8** | Detection & Real-Time Risk UI | In Progress | Gauge, timeline chart, and evidence quality bar components integrated into active call screen |
 | **Phase 9** | Independent Verification | In Progress | Verification bottom sheet & 3-step challenge code workflow implemented |
 | **Phase 10** | Call History & Integration | In Progress | Scores-only history list and detail audit screen implemented |
-| **Phase 11** | Testing & Stabilisation | **Active** | 55/55 tests passing (5 widget tests + 46 unit tests + 4 E2E pipeline integration tests across 8 test suites) |
+| **Phase 11** | Testing & Stabilisation | **Active** | 58/58 tests passing (5 widget tests + 49 unit tests + 4 E2E pipeline integration tests across 8 test suites) |
 | **Phase 12** | Demo Readiness & Release Packaging | Pending | Awaiting full integration before final release APK packaging |
 
 ---
@@ -31,11 +31,11 @@
 
 - **Flutter SDK:** 3.47.5 (Channel stable)
 - **Dart SDK:** 3.13.4
-- **Physical Device:** Vivo T2 5G (Model V2240, Android 15, API 35) — Target physical test device
+- **Physical Device:** Vivo T2 5G (Model V2240, Android 15, API 35) — Target physical test device (Connected & APK installed via ADB)
 - **Android SDK:** `C:\Android\Sdk`
 - **Android NDK:** `28.2.13676358`
 - **Static Analysis (`flutter analyze`):** Clean (0 issues found)
-- **Automated Tests (`flutter test`):** 55/55 passing (100% pass rate across 8 suites)
+- **Automated Tests (`flutter test`):** 58/58 passing (100% pass rate across 8 suites)
 
 ---
 
@@ -129,10 +129,13 @@
    - E2E WindowSender playback position gating and frame structure.
    - Modular frame builder strategy swapping.
 2. `test/unit/audio_frame_builder_test.dart` (4 tests) — PASSED
-3. `test/unit/playback_lifecycle_test.dart` (8 tests) — PASSED
+3. `test/unit/playback_lifecycle_test.dart` (11 tests) — PASSED
    - Lifecycle controls (idle before start, clean shutdown on dispose).
    - Complete playback window progression (exact 9 windows for 17.5s clip).
    - Frame PCM payload size validation.
+   - Post-completion guard: verifies `isCompleted` is set and no frames are emitted after `ProcessingState.completed`.
+   - Post-disposal guard: verifies `isDisposed` is set and no frames are emitted after `dispose()`.
+   - Playback state transitions: verifies `buffering` -> `ready` -> `playing` -> `completed` sequence.
    - Client non-generation of authenticity verdicts (strict architectural constraint: no risk scoring in FrameBuilder, WindowPlanner, or HeaderStrategy).
 4. `test/unit/scenario_model_test.dart` (14 tests) — PASSED
    - All 4 scenario-to-audio mappings (`clone_ceo`, `genuine_family`, `noisy_call`, `short_insufficient`).
@@ -144,7 +147,7 @@
 8. `test/widget/risk_band_badge_test.dart` (4 tests) — PASSED
 9. `test/widget_test.dart` (1 test) — PASSED
 
-**Total Tests:** 55 passed, 0 failed (100% pass rate).
+**Total Tests:** 58 passed, 0 failed (100% pass rate).
 
 ---
 
@@ -152,28 +155,34 @@
 
 In response to the mobile application audit requirements (Member 1 scope), the following corrective actions were performed:
 
-### Phase 1 – Critical Audio Fixes
-- **Audio Session & Playback Engine:** Configured `audio_session` in `AudioPlayerService` with speech-optimized configuration (`AudioSessionConfiguration(avAudioSessionCategory: AVAudioSessionCategory.playback, androidAudioAttributes: AndroidAudioAttributes(contentType: AndroidAudioContentType.speech, usage: AndroidAudioUsage.media))`) and audio focus management. Added volume initialization and error-safe state transitions.
-- **Scenario Model & Dynamic Audio Mapping:** Replaced hardcoded switch-case scenario mapping with a robust `Scenario` model (`lib/models/scenario.dart`) backed by `assets/scenarios.json`. Supports all 4 standard scenarios with verified asset paths and default fallbacks.
-- **Error Handling UI:** Integrated an audio error banner with a "Retry Audio" button in `ActiveCallScreen` if asset loading or audio session initialization fails.
-- **Playback Synchronization:** Verified `WindowSender` emits audio slices strictly in sync with actual audio playback progression.
+### 1. Physical Audio Verification & Player State
+- **Player State & Position Streams:** Connected `playerStateStream` and `positionStream` listeners in `ActiveCallScreen`. Audio readiness is now gated on `ProcessingState.ready` or active playback rather than merely completing asset loading.
+- **Error State & Retry Action:** Added clear error capture from asset loading, player state stream errors, and `play()` execution. Rendered a visible error banner in the UI with a dedicated **"Retry Audio"** button that disposes stale state and reinitializes the pipeline.
+- **Physical Device Deployment:** Verified Vivo T2 5G (Model V2240) connection over ADB. Compiled and successfully streamed/installed `app-debug.apk` onto the physical device.
 
-### Phase 2 – Correctness & Security
-- **Strict Server-Owned Verdicts:** Eliminated client-side heuristic verdict synthesis. The mobile client never generates authenticity decisions; outcome presentation is strictly driven by backend server analysis (or marked simulation in offline demo mode).
-- **Prominent Mock Banners:** `OutcomeScreen` displays an unambiguous, high-visibility banner: *"SIMULATED CALL OUTCOME • Offline Mock Data • Not Real ML Inference"* to avoid misleading users during local testing.
-- **Demo Invite Code Copy Action:** Added functional `Clipboard.setData` to the "Copy Code" button in `AddContactScreen` with feedback Snackbar, and labeled codes as simulated demo credentials (`SW-DEMO-XXXX`).
-- **Permissions & Storage Audit:** Confirmed no unauthorized microphone recording or persistent raw audio storage exists in compliance with user privacy. Added `MODIFY_AUDIO_SETTINGS` and biometric permissions.
+### 2. Audio Session & TTS Warning Coordination
+- **Interruption Event Handling:** Added `session.interruptionEventStream` listener in `AudioPlayerService` to ensure caller playback is resumed smoothly across transient interruptions.
+- **TTS Completion Callbacks:** Replaced hardcoded delays in `AlertService` with proper FlutterTts completion handlers (`setCompletionHandler`, `setErrorHandler`, `setCancelHandler`) and enabled `awaitSpeakCompletion(true)` with a safety timeout.
+- **Reliable Volume Ducking & Restoration:** Ensured caller voice volume is ducked to `0.2` during spoken warnings and guaranteed to be restored to normal `1.0` in the `finally` block even if TTS throws or is cancelled.
 
-### Phase 3 – Functional UI Fixes
-- **Form Validation:** Added strict email regex and $\ge 6$ character password validation in `LoginScreen`.
-- **Forgot Password Dialog:** Provided an informative dialog clarifying backend/Firebase Auth integration requirements rather than a silent no-op.
-- **Application Label:** Fixed application display label in `android/app/src/main/AndroidManifest.xml` to `SatyaSwar`.
-- **Call Selector:** Updated `ScenarioPickerScreen` to remove unsupported outgoing toggles and clearly indicate inbound call simulation.
+### 3. Call Lifecycle & WindowSender Synchronization
+- **Playback-Synchronized Call Timer:** Removed premature timer start from `initState()`. The call timer now starts strictly when playback actually begins (`playing && (ready || buffering)` or `pos > Duration.zero`).
+- **Timer Completion Stop:** Timer automatically stops when playback completes (`ProcessingState.completed`) or when the call is ended.
+- **WindowSender Guards:** Added `_completed` and `_disposed` lifecycle flags to `WindowSender` ensuring no audio frames are emitted after playback ends or the call screen is disposed.
 
-### Phase 4 – Static Analysis & Quality Gate
+### 4. Android Network Security Hardening
+- **Main Manifest Security:** Removed `android:usesCleartextTraffic="true"` from `android/app/src/main/AndroidManifest.xml`, ensuring production/release builds strictly require encrypted transport (HTTPS / WSS).
+- **Debug Local Traffic Exemption:** Added `android:usesCleartextTraffic="true"` solely to `android/app/src/debug/AndroidManifest.xml` to permit local development endpoints (`ws://` / `http://`) during testing without compromising production security.
+- **Permission Retention:** Retained necessary `INTERNET` and `ACCESS_NETWORK_STATE` permissions.
+
+### 5. Scenario Integrity & Intentional Silence
+- **Four Standard Scenarios Preserved:** All 4 scenarios (`clone_ceo`, `genuine_family`, `noisy_call`, `short_insufficient`) and their WAV mappings remain intact.
+- **Documented Intentional Silence:** Verified and explicitly documented in `lib/models/scenario.dart` and project specifications that `short_insufficient_01.wav` contains intentional silent/zero-energy PCM samples ($560,000$ zero bytes) designed to test the system's evidence insufficiency evaluation without synthesizing a false verdict.
+
+### 6. Static Analysis & Test Quality Gate
 - `flutter analyze`: **0 issues found** (Clean).
-- `flutter test`: **55/55 passed** across unit, widget, and integration suites.
-- Debug APK successfully compiled via Gradle: `build\app\outputs\flutter-apk\app-debug.apk`.
+- `flutter test`: **58/58 passed** across unit, widget, and integration suites.
+- Debug APK successfully compiled via Gradle and installed on Vivo T2 5G via ADB.
 
 ---
 

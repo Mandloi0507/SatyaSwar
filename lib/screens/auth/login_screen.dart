@@ -113,8 +113,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (val == null || val.trim().isEmpty) {
                     return 'Please enter your email';
                   }
-                  if (!val.contains('@')) {
-                    return 'Enter a valid email address';
+                  final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                  if (!emailRegex.hasMatch(val.trim())) {
+                    return 'Please enter a valid email address';
                   }
                   return null;
                 },
@@ -139,20 +140,59 @@ class _LoginScreenState extends State<LoginScreen> {
                       _obscurePassword
                           ? Icons.visibility_off_outlined
                           : Icons.visibility_outlined,
-                      color: AppColors.textSecondary,
                     ),
                     onPressed: () =>
                         setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
                 validator: (val) {
-                  if (val == null || val.length < 6) {
+                  if (val == null || val.isEmpty) {
+                    return 'Please enter your password';
+                  }
+                  if (val.length < 6) {
                     return 'Password must be at least 6 characters';
                   }
                   return null;
                 },
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppColors.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: const BorderSide(color: AppColors.border),
+                        ),
+                        title: const Text('Reset Password', style: AppTextStyles.subtitle),
+                        content: const Text(
+                          'Password reset requires an active Firebase Authentication or Identity Provider backend integration.\n\nIn the current offline prototype mode, you can sign in directly using the pre-configured credentials.',
+                          style: AppTextStyles.bodySecondary,
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            child: const Text('OK', style: TextStyle(color: AppColors.primaryGlow)),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
 
               PrimaryButton(
                 label: 'Sign In',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../models/scenario.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/common/app_scaffold.dart';
@@ -13,142 +14,113 @@ class ScenarioPickerScreen extends StatefulWidget {
 }
 
 class _ScenarioPickerScreenState extends State<ScenarioPickerScreen> {
-  String _selectedDirection = 'incoming';
+  List<Scenario> _scenarios = Scenario.defaultScenarios;
+  bool _isLoading = true;
 
-  final List<Map<String, dynamic>> _scenarios = [
-    {
-      'id': 'clone_ceo',
-      'title': 'Cloned CEO Voice (Impersonation)',
-      'claimedName': 'Rakesh Sir',
-      'callerNumber': 'Unknown Caller',
-      'duration': '21.0s (11 windows)',
-      'expectedBand': 'High Risk / Synthetic',
-      'description': 'High-urgency synthetic voice impersonating executive leadership requesting an urgent fund transfer.',
-      'icon': Icons.warning_rounded,
-      'isDanger': true,
-    },
-    {
-      'id': 'genuine_family',
-      'title': 'Genuine Family Call',
-      'claimedName': 'Priyanka',
-      'callerNumber': '+91 98xxxxxx01',
-      'duration': '17.5s (9 windows)',
-      'expectedBand': 'Low Risk / Genuine',
-      'description': 'Natural biological voice from known family contact with standard prosody and speech rhythms.',
-      'icon': Icons.check_circle_outline_rounded,
-      'isDanger': false,
-    },
-    {
-      'id': 'noisy_call',
-      'title': 'Noisy Background Scenario',
-      'claimedName': 'Delivery Agent',
-      'callerNumber': '+91 91xxxxxx42',
-      'duration': '17.5s (9 windows)',
-      'expectedBand': 'Medium / Adaptive Quality',
-      'description': 'Heavy ambient background noise challenging acoustic feature extraction.',
-      'icon': Icons.volume_down_rounded,
-      'isDanger': false,
-    },
-    {
-      'id': 'short_insufficient',
-      'title': 'Degraded Audio Sample',
-      'claimedName': 'Bank Officer',
-      'callerNumber': '+91 80xxxxxx99',
-      'duration': '17.5s (Sparse speech)',
-      'expectedBand': 'Insufficient Evidence',
-      'description': 'Refusal to guess under inadequate speech duration or acoustic confidence.',
-      'icon': Icons.help_outline_rounded,
-      'isDanger': false,
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadScenarios();
+  }
+
+  Future<void> _loadScenarios() async {
+    final list = await Scenario.loadAll();
+    if (mounted) {
+      setState(() {
+        _scenarios = list;
+        _isLoading = false;
+      });
+    }
+  }
+
+  IconData _iconForScenario(String id) {
+    switch (id) {
+      case 'clone_ceo':
+        return Icons.warning_amber_rounded;
+      case 'genuine_family':
+        return Icons.check_circle_outline_rounded;
+      case 'noisy_call':
+        return Icons.volume_down_rounded;
+      case 'short_insufficient':
+        return Icons.help_outline_rounded;
+      default:
+        return Icons.phone_in_talk_rounded;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       appBar: AppBar(title: const Text('Select Simulation Scenario')),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-        children: [
-          // Direction Selector
-          Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 16.0,
+              ),
               children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _selectedDirection = 'incoming'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _selectedDirection == 'incoming'
-                            ? AppColors.primary
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
+                // Direction Badge (Inbound Caller Simulation)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.call_received_rounded,
+                        color: AppColors.primaryGlow,
+                        size: 20,
                       ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Incoming Call',
-                        style: TextStyle(
-                          color: _selectedDirection == 'incoming'
-                              ? Colors.white
-                              : AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Simulation Mode: Inbound Caller',
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Demonstrating real-time detection on incoming voice calls',
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () =>
-                        setState(() => _selectedDirection = 'outgoing'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _selectedDirection == 'outgoing'
-                            ? AppColors.primary
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Outgoing Call',
-                        style: TextStyle(
-                          color: _selectedDirection == 'outgoing'
-                              ? Colors.white
-                              : AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Select a scenario to launch the simulated call experience:',
+                  style: AppTextStyles.bodySecondary,
                 ),
+                const SizedBox(height: 16),
+                ..._scenarios.map(_buildScenarioCard),
               ],
             ),
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Select a scenario to launch the simulated call experience:',
-            style: AppTextStyles.bodySecondary,
-          ),
-          const SizedBox(height: 16),
-
-          ..._scenarios.map((scenario) => _buildScenarioCard(scenario)),
-        ],
-      ),
     );
   }
 
-  Widget _buildScenarioCard(Map<String, dynamic> scenario) {
-    final isDanger = scenario['isDanger'] as bool;
+  Widget _buildScenarioCard(Scenario scenario) {
+    final isDanger = scenario.isDanger;
+    final icon = _iconForScenario(scenario.id);
+    final durationSec = (scenario.durationMs / 1000).toStringAsFixed(1);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -168,10 +140,13 @@ class _ScenarioPickerScreenState extends State<ScenarioPickerScreen> {
           context.push(
             '/call/incoming',
             extra: {
-              'scenarioId': scenario['id'],
-              'claimedName': scenario['claimedName'],
-              'callerNumber': scenario['callerNumber'],
-              'direction': _selectedDirection,
+              'scenarioId': scenario.id,
+              'claimedName': scenario.claimedName,
+              'callerNumber': scenario.callerNumber,
+              'audioAsset': scenario.audioAsset,
+              'durationMs': scenario.durationMs,
+              'description': scenario.description,
+              'expectedBand': scenario.expectedBand,
             },
           );
         },
@@ -192,7 +167,7 @@ class _ScenarioPickerScreenState extends State<ScenarioPickerScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      scenario['icon'] as IconData,
+                      icon,
                       color: isDanger
                           ? AppColors.danger
                           : AppColors.primaryGlow,
@@ -205,12 +180,12 @@ class _ScenarioPickerScreenState extends State<ScenarioPickerScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          scenario['title'] as String,
+                          scenario.title,
                           style: AppTextStyles.sectionHeader,
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Claimed: ${scenario['claimedName']} • ${scenario['duration']}',
+                          'Claimed: ${scenario.claimedName} • ${durationSec}s',
                           style: AppTextStyles.caption.copyWith(
                             color: AppColors.primaryGlow,
                           ),
@@ -222,7 +197,7 @@ class _ScenarioPickerScreenState extends State<ScenarioPickerScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                scenario['description'] as String,
+                scenario.description,
                 style: AppTextStyles.bodySecondary.copyWith(fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -240,7 +215,7 @@ class _ScenarioPickerScreenState extends State<ScenarioPickerScreen> {
                       border: Border.all(color: AppColors.border),
                     ),
                     child: Text(
-                      'Expected: ${scenario['expectedBand']}',
+                      'Expected: ${scenario.expectedBand}',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,

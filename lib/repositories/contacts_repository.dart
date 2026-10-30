@@ -95,7 +95,7 @@ class MockContactsRepository implements ContactsRepository {
     await Future<void>.delayed(const Duration(milliseconds: 200));
     final random = Random();
     final num = 1000 + random.nextInt(9000);
-    return 'SW-$num';
+    return 'SW-DEMO-$num';
   }
 
   @override

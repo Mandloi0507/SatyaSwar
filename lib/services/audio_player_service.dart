@@ -1,3 +1,4 @@
+import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../utils/logger.dart';
@@ -7,6 +8,7 @@ import '../utils/logger.dart';
 class AudioPlayerService {
   final AudioPlayer _player;
   double _normalVolume = 1.0;
+  bool _sessionConfigured = false;
 
   AudioPlayerService({AudioPlayer? player}) : _player = player ?? AudioPlayer();
 
@@ -19,12 +21,46 @@ class AudioPlayerService {
   Duration get position => _player.position;
   Duration? get duration => _player.duration;
   bool get isPlaying => _player.playing;
+  PlayerState get playerState => _player.playerState;
+
+  /// Configures Android AudioSession for loud, clear speech/media playback through device speaker
+  Future<void> initAudioSession() async {
+    if (_sessionConfigured) return;
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playback,
+        avAudioSessionMode: AVAudioSessionMode.spokenAudio,
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.speech,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: false,
+      ));
+      await session.setActive(true);
+      _sessionConfigured = true;
+      AppLogger.d(
+        'AudioSession initialized with speech/media loudspeaker attributes',
+        'AudioPlayerService',
+      );
+    } catch (e) {
+      AppLogger.w('AudioSession configuration notice: $e', 'AudioPlayerService');
+    }
+  }
 
   /// Loads an audio asset from Flutter rootBundle
   Future<Duration?> loadAsset(String assetPath) async {
     try {
+      await initAudioSession();
       AppLogger.d('Loading audio asset: $assetPath', 'AudioPlayerService');
       final dur = await _player.setAsset(assetPath);
+      // Explicitly set volume to normal 1.0 (loudest)
+      await _player.setVolume(_normalVolume);
+      AppLogger.d(
+        'Audio asset loaded successfully. Duration: $dur, Volume: $_normalVolume',
+        'AudioPlayerService',
+      );
       return dur;
     } catch (e, st) {
       AppLogger.e(
@@ -39,6 +75,7 @@ class AudioPlayerService {
 
   /// Starts playback
   Future<void> play() async {
+    AppLogger.d('Starting audio playback', 'AudioPlayerService');
     await _player.play();
   }
 

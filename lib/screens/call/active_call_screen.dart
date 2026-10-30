@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/call_history_record.dart';
 import '../../models/risk_band.dart';
+import '../../models/scenario.dart';
 import '../../providers/call_history_provider.dart';
 import '../../providers/risk_monitor_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -48,6 +49,10 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   WindowPlanner? _windowPlanner;
   WavData? _wavData;
   bool _isAudioReady = false;
+  String? _audioErrorMessage;
+  Duration _playbackPosition = Duration.zero;
+  Duration? _audioTotalDuration;
+  StreamSubscription<Duration>? _positionSub;
 
   Timer? _callTimer;
   int _secondsElapsed = 0;
@@ -63,11 +68,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
     try {
       final scenarioId =
           widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
-      final assetPath =
-          'assets/audio/calls/${scenarioId == 'clone_ceo' ? 'clone_ceo_01.wav' : 'genuine_01.wav'}';
+      String assetPath = widget.scenarioData?['audioAsset'] as String? ?? '';
+      if (assetPath.isEmpty) {
+        assetPath = Scenario.assetForScenarioId(scenarioId);
+      }
 
       AppLogger.d(
-        'Initializing audio pipeline with $assetPath',
+        'Initializing audio pipeline with $assetPath (scenario: $scenarioId)',
         'ActiveCallScreen',
       );
 
@@ -108,14 +115,28 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         onFrame: _onAudioWindowEmitted,
       );
 
+      // Track playback position for live display
+      _positionSub?.cancel();
+      _positionSub = _playerService.positionStream.listen((pos) {
+        if (mounted) {
+          setState(() => _playbackPosition = pos);
+        }
+      });
+
       // 5. Load audio into player and start playback
-      await _playerService.loadAsset(assetPath);
+      final dur = await _playerService.loadAsset(assetPath);
       _windowSender!.start();
-      await _playerService.play();
 
       if (mounted) {
-        setState(() => _isAudioReady = true);
+        setState(() {
+          _isAudioReady = true;
+          _audioTotalDuration = dur;
+          _audioErrorMessage = null;
+        });
       }
+
+      // Start playback non-blocking so call UI runs concurrently with playback
+      unawaited(_playerService.play());
     } catch (e, st) {
       AppLogger.e(
         'Failed to initialize audio pipeline',
@@ -123,6 +144,12 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         st,
         'ActiveCallScreen',
       );
+      if (mounted) {
+        setState(() {
+          _isAudioReady = false;
+          _audioErrorMessage = 'Audio engine error: $e';
+        });
+      }
     }
   }
 
@@ -141,6 +168,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
   @override
   void dispose() {
     _callTimer?.cancel();
+    _positionSub?.cancel();
     _windowSender?.dispose();
     _playerService.stop();
     _playerService.dispose();
@@ -150,11 +178,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
 
   void _handleEndCall() {
     _callTimer?.cancel();
+    _positionSub?.cancel();
     _windowSender?.dispose();
     _playerService.stop();
 
     final riskMonitor = context.read<RiskMonitorProvider>();
     final history = context.read<CallHistoryProvider>();
+    final settings = context.read<SettingsProvider>();
 
     final scenarioId =
         widget.scenarioData?['scenarioId'] as String? ?? 'clone_ceo';
@@ -162,6 +192,13 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         widget.scenarioData?['claimedName'] as String? ?? 'Rakesh Sir';
     final peakRisk = riskMonitor.peakScore.round();
     final peakBand = riskMonitor.currentBand;
+
+    // Server-reported outcome: Client never generates final authenticity verdicts independently
+    final serverOutcome = settings.isMockMode
+        ? 'Simulated session ended (Offline Mock Evaluation)'
+        : (riskMonitor.latestAlertMessage.isNotEmpty
+            ? riskMonitor.latestAlertMessage
+            : 'Analysis session ended');
 
     // Record scores-only call history (never stores raw audio or transcripts)
     final record = CallHistoryRecord(
@@ -175,9 +212,7 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
       peakRiskBand: peakBand,
       evidenceQuality: riskMonitor.evidenceQuality,
       verificationStatus: 'unverified',
-      finalOutcome: peakBand == RiskBand.high
-          ? 'Likely Impersonation'
-          : 'No synthetic indicators detected',
+      finalOutcome: serverOutcome,
       timelineScores: List.of(riskMonitor.timelineScores),
     );
 
@@ -191,9 +226,8 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         'peakRiskIndex': peakRisk,
         'peakBand': peakBand,
         'verificationStatus': 'Unverified',
-        'finalOutcome': peakBand == RiskBand.high
-            ? 'Likely Impersonation'
-            : 'No synthetic indicators detected',
+        'isMock': settings.isMockMode,
+        'serverReportedOutcome': serverOutcome,
       },
     );
   }
@@ -227,6 +261,62 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
         children: [
           // 1. Mandatory Simulated Call Disclaimer Banner
           const SimulatedBanner(),
+
+          // 1b. Mock Engine Indicator
+          if (context.watch<SettingsProvider>().isMockMode)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              color: AppColors.primary.withValues(alpha: 0.12),
+              alignment: Alignment.center,
+              child: const Text(
+                'SIMULATED ANALYSIS (OFFLINE MOCK ENGINE)',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryGlow,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+
+          // 1c. Visible Audio Error State
+          if (_audioErrorMessage != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: AppColors.danger.withValues(alpha: 0.2),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.danger,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _audioErrorMessage!,
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _initAudioPipeline,
+                    child: const Text(
+                      'Retry',
+                      style: TextStyle(
+                        color: AppColors.danger,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           Expanded(
             child: ListView(
@@ -291,10 +381,19 @@ class _ActiveCallScreenState extends State<ActiveCallScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _isAudioReady ? 'Audio Streaming' : 'Buffering Audio',
-                          style: const TextStyle(
+                          _audioErrorMessage != null
+                              ? 'Audio Error'
+                              : (_isAudioReady
+                                  ? 'Audio: ${TimeFormat.formatDuration(_playbackPosition)} / ${TimeFormat.formatDuration(_audioTotalDuration ?? const Duration(seconds: 17))}'
+                                  : 'Initializing Audio...'),
+                          style: TextStyle(
                             fontSize: 10,
-                            color: AppColors.textSecondary,
+                            color: _audioErrorMessage != null
+                                ? AppColors.danger
+                                : (_isAudioReady
+                                    ? AppColors.success
+                                    : AppColors.textSecondary),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],

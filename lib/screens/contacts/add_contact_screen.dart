@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -132,12 +133,30 @@ class _AddContactScreenState extends State<AddContactScreen>
       padding: const EdgeInsets.all(24.0),
       child: Column(
         children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+            ),
+            child: const Text(
+              'DEMO INVITE CODE • Local Simulated Verification',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryGlow,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           const Text(
             'Share this invite code or QR with your trusted contact. Once accepted, you will be linked for independent verification.',
             style: AppTextStyles.bodySecondary,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
 
           // QR Display Card
           Container(
@@ -190,7 +209,7 @@ class _AddContactScreenState extends State<AddContactScreen>
           ),
           const SizedBox(height: 20),
           Text(
-            'Expires in 10 minutes',
+            'Expires in 10 minutes (Simulated)',
             style: AppTextStyles.caption.copyWith(color: AppColors.warning),
           ),
           const SizedBox(height: 24),
@@ -201,10 +220,18 @@ class _AddContactScreenState extends State<AddContactScreen>
                   label: 'Copy Code',
                   variant: ButtonVariant.secondary,
                   icon: Icons.copy_rounded,
-                  onPressed: () {
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(text: _generatedInviteCode),
+                    );
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Invite code $_generatedInviteCode copied!'),
+                        content: Text(
+                          'Invite code "$_generatedInviteCode" copied to clipboard!',
+                        ),
+                        backgroundColor: AppColors.success,
+                        duration: const Duration(seconds: 2),
                       ),
                     );
                   },

@@ -81,6 +81,7 @@ class MockCallAnalysisService implements CallAnalysisService {
           }
           break;
 
+        case 'noisy_call':
         case 'noisy_background':
           score = 38.0 + (seq % 3) * 6;
           band = RiskBand.medium;

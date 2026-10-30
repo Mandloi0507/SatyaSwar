@@ -22,7 +22,7 @@
 | **Phase 8** | Detection & Real-Time Risk UI | In Progress | Gauge, timeline chart, and evidence quality bar components integrated into active call screen |
 | **Phase 9** | Independent Verification | In Progress | Verification bottom sheet & 3-step challenge code workflow implemented |
 | **Phase 10** | Call History & Integration | In Progress | Scores-only history list and detail audit screen implemented |
-| **Phase 11** | Testing & Stabilisation | **Active** | 33/33 tests passing (5 widget tests + 24 unit tests + 4 E2E pipeline integration tests) |
+| **Phase 11** | Testing & Stabilisation | **Active** | 55/55 tests passing (5 widget tests + 46 unit tests + 4 E2E pipeline integration tests across 8 test suites) |
 | **Phase 12** | Demo Readiness & Release Packaging | Pending | Awaiting full integration before final release APK packaging |
 
 ---
@@ -31,11 +31,11 @@
 
 - **Flutter SDK:** 3.47.5 (Channel stable)
 - **Dart SDK:** 3.13.4
-- **Physical Device:** Vivo T2 5G (Model V2240, Android 15, API 35) — Connected via ADB
+- **Physical Device:** Vivo T2 5G (Model V2240, Android 15, API 35) — Target physical test device
 - **Android SDK:** `C:\Android\Sdk`
 - **Android NDK:** `28.2.13676358`
 - **Static Analysis (`flutter analyze`):** Clean (0 issues found)
-- **Automated Tests (`flutter test`):** 33/33 passing (100% pass rate)
+- **Automated Tests (`flutter test`):** 55/55 passing (100% pass rate across 8 suites)
 
 ---
 
@@ -129,17 +129,55 @@
    - E2E WindowSender playback position gating and frame structure.
    - Modular frame builder strategy swapping.
 2. `test/unit/audio_frame_builder_test.dart` (4 tests) — PASSED
-3. `test/unit/wav_parser_test.dart` (7 tests) — PASSED
-4. `test/unit/window_planner_test.dart` (7 tests) — PASSED
-5. `test/unit/window_sender_test.dart` (6 tests) — PASSED
-6. `test/widget/risk_band_badge_test.dart` (4 tests) — PASSED
-7. `test/widget_test.dart` (1 test) — PASSED
+3. `test/unit/playback_lifecycle_test.dart` (8 tests) — PASSED
+   - Lifecycle controls (idle before start, clean shutdown on dispose).
+   - Complete playback window progression (exact 9 windows for 17.5s clip).
+   - Frame PCM payload size validation.
+   - Client non-generation of authenticity verdicts (strict architectural constraint: no risk scoring in FrameBuilder, WindowPlanner, or HeaderStrategy).
+4. `test/unit/scenario_model_test.dart` (14 tests) — PASSED
+   - All 4 scenario-to-audio mappings (`clone_ceo`, `genuine_family`, `noisy_call`, `short_insufficient`).
+   - JSON deserialization, fallback handling, round-trip serialization.
+   - Validation of asset paths and positive duration bounds.
+5. `test/unit/wav_parser_test.dart` (7 tests) — PASSED
+6. `test/unit/window_planner_test.dart` (7 tests) — PASSED
+7. `test/unit/window_sender_test.dart` (6 tests) — PASSED
+8. `test/widget/risk_band_badge_test.dart` (4 tests) — PASSED
+9. `test/widget_test.dart` (1 test) — PASSED
 
-**Total Tests:** 33 passed, 0 failed (100% pass rate).
+**Total Tests:** 55 passed, 0 failed (100% pass rate).
 
 ---
 
-## 6. Pending Backend Integration Dependencies
+## 6. Mobile Application Audit & Remediation Summary
+
+In response to the mobile application audit requirements (Member 1 scope), the following corrective actions were performed:
+
+### Phase 1 – Critical Audio Fixes
+- **Audio Session & Playback Engine:** Configured `audio_session` in `AudioPlayerService` with speech-optimized configuration (`AudioSessionConfiguration(avAudioSessionCategory: AVAudioSessionCategory.playback, androidAudioAttributes: AndroidAudioAttributes(contentType: AndroidAudioContentType.speech, usage: AndroidAudioUsage.media))`) and audio focus management. Added volume initialization and error-safe state transitions.
+- **Scenario Model & Dynamic Audio Mapping:** Replaced hardcoded switch-case scenario mapping with a robust `Scenario` model (`lib/models/scenario.dart`) backed by `assets/scenarios.json`. Supports all 4 standard scenarios with verified asset paths and default fallbacks.
+- **Error Handling UI:** Integrated an audio error banner with a "Retry Audio" button in `ActiveCallScreen` if asset loading or audio session initialization fails.
+- **Playback Synchronization:** Verified `WindowSender` emits audio slices strictly in sync with actual audio playback progression.
+
+### Phase 2 – Correctness & Security
+- **Strict Server-Owned Verdicts:** Eliminated client-side heuristic verdict synthesis. The mobile client never generates authenticity decisions; outcome presentation is strictly driven by backend server analysis (or marked simulation in offline demo mode).
+- **Prominent Mock Banners:** `OutcomeScreen` displays an unambiguous, high-visibility banner: *"SIMULATED CALL OUTCOME • Offline Mock Data • Not Real ML Inference"* to avoid misleading users during local testing.
+- **Demo Invite Code Copy Action:** Added functional `Clipboard.setData` to the "Copy Code" button in `AddContactScreen` with feedback Snackbar, and labeled codes as simulated demo credentials (`SW-DEMO-XXXX`).
+- **Permissions & Storage Audit:** Confirmed no unauthorized microphone recording or persistent raw audio storage exists in compliance with user privacy. Added `MODIFY_AUDIO_SETTINGS` and biometric permissions.
+
+### Phase 3 – Functional UI Fixes
+- **Form Validation:** Added strict email regex and $\ge 6$ character password validation in `LoginScreen`.
+- **Forgot Password Dialog:** Provided an informative dialog clarifying backend/Firebase Auth integration requirements rather than a silent no-op.
+- **Application Label:** Fixed application display label in `android/app/src/main/AndroidManifest.xml` to `SatyaSwar`.
+- **Call Selector:** Updated `ScenarioPickerScreen` to remove unsupported outgoing toggles and clearly indicate inbound call simulation.
+
+### Phase 4 – Static Analysis & Quality Gate
+- `flutter analyze`: **0 issues found** (Clean).
+- `flutter test`: **55/55 passed** across unit, widget, and integration suites.
+- Debug APK successfully compiled via Gradle: `build\app\outputs\flutter-apk\app-debug.apk`.
+
+---
+
+## 7. Pending Backend Integration Dependencies
 
 1. **Protocol Layout Confirmation (Member 2):**
    - Confirmation of exact binary frame header byte length and field ordering (magic bytes, version, sequence number, timestamp, offset, flags, checksum).

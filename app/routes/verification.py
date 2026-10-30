@@ -51,7 +51,7 @@ def compute_code_hash(code: str) -> str:
 
 @router.post("/verifications", response_model=VerificationCreateResponse, status_code=status.HTTP_201_CREATED)
 @router.post("/verification", response_model=VerificationCreateResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
-def create_verification(
+async def create_verification(
     payload: VerificationCreateRequest,
     current_user: AuthUser = Depends(get_current_user),
 ) -> VerificationCreateResponse:
@@ -130,21 +130,14 @@ def create_verification(
     })
 
     # Broadcast verification update to active WebSocket connections
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            manager.broadcast(session_id, {
-                "type": "verification_update",
-                "session_id": session_id,
-                "verification_id": ver_req.id,
-                "status": VerificationStatus.PENDING.value,
-                "match_code": match_code,
-                "server_time": datetime.now(timezone.utc).isoformat(),
-            })
-        )
-    except RuntimeError:
-        pass
+    await manager.broadcast(session_id, {
+        "type": "verification_update",
+        "session_id": session_id,
+        "verification_id": ver_req.id,
+        "status": VerificationStatus.PENDING.value,
+        "match_code": match_code,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    })
 
     return VerificationCreateResponse(
         verification_id=ver_req.id,
@@ -171,7 +164,7 @@ def get_verification(
 
 @router.post("/verifications/{verification_id}/respond", response_model=VerificationRequest)
 @router.post("/verification/{verification_id}/respond", response_model=VerificationRequest, include_in_schema=False)
-def respond_verification(
+async def respond_verification(
     verification_id: str,
     payload: VerificationRespondRequest,
     current_user: AuthUser = Depends(get_current_user),
@@ -221,27 +214,20 @@ def respond_verification(
     })
 
     # Broadcast resolution to WebSocket
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            manager.broadcast(updated_req.session_id, {
-                "type": "verification_update",
-                "session_id": updated_req.session_id,
-                "verification_id": updated_req.id,
-                "status": updated_req.status.value,
-                "server_time": datetime.now(timezone.utc).isoformat(),
-            })
-        )
-    except RuntimeError:
-        pass
+    await manager.broadcast(updated_req.session_id, {
+        "type": "verification_update",
+        "session_id": updated_req.session_id,
+        "verification_id": updated_req.id,
+        "status": updated_req.status.value,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    })
 
     return updated_req
 
 
 @router.post("/verifications/{verification_id}/cancel", response_model=VerificationRequest)
 @router.post("/verification/{verification_id}/cancel", response_model=VerificationRequest, include_in_schema=False)
-def cancel_verification(
+async def cancel_verification(
     verification_id: str,
     current_user: AuthUser = Depends(get_current_user),
 ) -> VerificationRequest:
@@ -259,20 +245,13 @@ def cancel_verification(
     })
 
     # Broadcast cancel to WebSocket
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            manager.broadcast(updated_req.session_id, {
-                "type": "verification_update",
-                "session_id": updated_req.session_id,
-                "verification_id": updated_req.id,
-                "status": VerificationStatus.CANCELLED.value,
-                "server_time": datetime.now(timezone.utc).isoformat(),
-            })
-        )
-    except RuntimeError:
-        pass
+    await manager.broadcast(updated_req.session_id, {
+        "type": "verification_update",
+        "session_id": updated_req.session_id,
+        "verification_id": updated_req.id,
+        "status": VerificationStatus.CANCELLED.value,
+        "server_time": datetime.now(timezone.utc).isoformat(),
+    })
 
     return updated_req
 
@@ -315,3 +294,4 @@ def list_inbound_verifications(
             )
         )
     return results
+

@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env*
+!.env.example
+
+# Pytest & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local data & temporary files
+tmp/
+temp/
+*.log
+*.wav
+*.pcm
+*.mp3
+service-account*.json
+credentials*.json
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+.antigravity/
+.gemini/

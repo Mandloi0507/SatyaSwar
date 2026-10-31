@@ -1,0 +1,38 @@
+[
+  {
+    "id": "genuine_family",
+    "title": "Genuine call from a known contact",
+    "claimedName": "Priyanka",
+    "callerNumber": "+91 98xxxxxx01",
+    "audioAsset": "assets/audio/calls/genuine_01.wav",
+    "durationMs": 7320,
+    "description": "Standard family check-in call with clean natural speech patterns and expected prosody."
+  },
+  {
+    "id": "clone_ceo",
+    "title": "Cloned CEO requesting an urgent transfer",
+    "claimedName": "Rakesh Sir",
+    "callerNumber": "Unknown",
+    "audioAsset": "assets/audio/calls/clone_ceo_01.wav",
+    "durationMs": 11230,
+    "description": "High-urgency synthetic voice impersonating executive leadership requesting an unauthorized fund transfer."
+  },
+  {
+    "id": "noisy_call",
+    "title": "Noisy call with background interference",
+    "claimedName": "Delivery Agent",
+    "callerNumber": "+91 91xxxxxx42",
+    "audioAsset": "assets/audio/calls/noisy_01.wav",
+    "durationMs": 5350,
+    "description": "Acoustically challenging audio demonstrating evidence quality assessment and adaptive thresholds."
+  },
+  {
+    "id": "short_insufficient",
+    "title": "Short or degraded speech sample",
+    "claimedName": "Bank Officer",
+    "callerNumber": "+91 80xxxxxx99",
+    "audioAsset": "assets/audio/calls/short_insufficient_01.wav",
+    "durationMs": 1800,
+    "description": "Call with sparse speech testing system refusal to guess under inadequate acoustic evidence."
+  }
+]

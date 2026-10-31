@@ -1,0 +1,29 @@
+# Python virtual environments
+venv/
+.venv/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Firebase credentials
+serviceAccount*.json
+firebase-credentials*.json
+secrets/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Audio files and datasets
+*.wav
+*.pcm
+datasets/
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

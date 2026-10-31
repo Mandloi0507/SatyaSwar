@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "scenarios": [
+    {
+      "id": "gen_hi_01",
+      "title": "Genuine Hindi call",
+      "language": "hi",
+      "label": "genuine",
+      "claimed_caller": "Abhishek",
+      "file": "assets/scenarios/gen_hi_01.wav",
+      "expected_band_final": "low",
+      "transcript_hint": "meeting time change"
+    },
+    {
+      "id": "clone_hi_01",
+      "title": "Cloned Hindi emergency",
+      "language": "hi",
+      "label": "clone",
+      "claimed_caller": "Priyanka",
+      "file": "assets/scenarios/clone_hi_01.wav",
+      "expected_band_final": "high",
+      "transcript_hint": "urgent money, do not tell anyone"
+    },
+    {
+      "id": "gen_en_01",
+      "title": "Genuine English call",
+      "language": "en",
+      "label": "genuine",
+      "claimed_caller": "Rahul",
+      "file": "assets/scenarios/gen_en_01.wav",
+      "expected_band_final": "low",
+      "transcript_hint": "project update"
+    },
+    {
+      "id": "clone_en_01",
+      "title": "Cloned English CEO request",
+      "language": "en",
+      "label": "clone",
+      "claimed_caller": "Rahul",
+      "file": "assets/scenarios/clone_en_01.wav",
+      "expected_band_final": "high",
+      "transcript_hint": "urgent transfer, confidential"
+    },
+    {
+      "id": "noisy_hi_01",
+      "title": "Noisy Hindi call",
+      "language": "hi",
+      "label": "genuine",
+      "claimed_caller": "Abhishek",
+      "file": "assets/scenarios/noisy_hi_01.wav",
+      "expected_band_final": "insufficient_evidence",
+      "transcript_hint": "street noise"
+    },
+    {
+      "id": "short_en_01",
+      "title": "Very short call",
+      "language": "en",
+      "label": "genuine",
+      "claimed_caller": "Unknown",
+      "file": "assets/scenarios/short_en_01.wav",
+      "expected_band_final": "insufficient_evidence",
+      "transcript_hint": "two seconds only"
+    }
+  ]
+}
